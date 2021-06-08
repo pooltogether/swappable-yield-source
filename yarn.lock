@@ -752,6 +752,7 @@ __metadata:
     "@studydefi/money-legos": 2.4.2
     "@typechain/ethers-v5": 7.0.0
     "@typechain/hardhat": 2.0.1
+    "@types/node": 15.12.2
     chai: 4.3.4
     chalk: 4.1.1
     debug: 4.3.1
@@ -1191,6 +1192,13 @@ __metadata:
   version: 15.12.1
   resolution: "@types/node@npm:15.12.1"
   checksum: 8a111dc99281e07b1a6408437a09eafb081760aa8bd73d481793345b302a565772c45f2be7fdd7386a8a7ce589a999ccfb513dba15a0b3320dba03c94308253f
+  languageName: node
+  linkType: hard
+
+"@types/node@npm:15.12.2":
+  version: 15.12.2
+  resolution: "@types/node@npm:15.12.2"
+  checksum: 26b9170eb825656751955e919dcea7963d1be4d1eba361c67e41b51a55436c51d69d63f49ee98aaf4fe2e0e5eb3c0038408a8f542316b7583e9badf4fdd10024
   languageName: node
   linkType: hard
 
