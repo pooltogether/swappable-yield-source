@@ -11,6 +11,7 @@ import 'hardhat-dependency-compiler';
 import { HardhatUserConfig } from 'hardhat/config';
 
 import * as forkTasks from './scripts/fork';
+import * as prizePoolTasks from './scripts/createAndRunPrizePoolMainnet';
 import networks from './hardhat.network';
 
 const optimizerEnabled = !process.env.OPTIMIZER_DISABLED;
@@ -71,5 +72,6 @@ const config: HardhatUserConfig = {
 };
 
 forkTasks;
+prizePoolTasks;
 
 export default config;

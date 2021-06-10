@@ -61,6 +61,12 @@ direnv allow
 
 We use the [Hardhat](https://hardhat.org) ecosystem to test and deploy our contracts.
 
+First, you will need to deploy contracts in local.
+
+Start the hardhat node by running: `yarn start-fork`
+
+Then to deploy contracts locally, run: `yarn deploy-fork`
+
 To run unit tests:
 
 ```
@@ -92,7 +98,7 @@ yarn start-fork
 In another window, start the scripts to deploy and create a Aave Yield Source Prize Pool, deposit Dai into it, swap to another Yield Source, award the prize and withdraw.
 
 ```
-yarn deploy-fork && yarn run-fork
+yarn run-fork
 ```
 
 ### Deploy

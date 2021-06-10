@@ -9,11 +9,13 @@ const networks: HardhatUserConfig['networks'] = {
     url: 'http://127.0.0.1:8555',
     blockGasLimit: 200000000,
     allowUnlimitedContractSize: true,
+    tags: ['test'],
   },
   localhost: {
     chainId: 1,
     url: 'http://127.0.0.1:8545',
     allowUnlimitedContractSize: true,
+    tags: ['test', 'local'],
   },
 };
 
@@ -22,7 +24,7 @@ if (alchemyUrl && process.env.FORK_ENABLED && mnemonic) {
     chainId: 1,
     forking: {
       url: alchemyUrl,
-      blockNumber: 12226812,
+      blockNumber: 12631351,
     },
     accounts: {
       mnemonic,
@@ -31,6 +33,8 @@ if (alchemyUrl && process.env.FORK_ENABLED && mnemonic) {
 } else {
   networks.hardhat = {
     allowUnlimitedContractSize: true,
+    saveDeployments: true,
+    tags: ['test', 'local'],
   };
 }
 

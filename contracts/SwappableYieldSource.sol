@@ -52,8 +52,8 @@ contract SwappableYieldSource is IYieldSource, OwnableUpgradeable {
   }
 
   /// @notice Returns the ERC20 asset token used for deposits
-  /// @return The ERC20 asset token interface
-  function depositToken() external view override returns (address) {
+  /// @return The ERC20 asset token address
+  function depositToken() public view override returns (address) {
     return yieldSource.depositToken();
   }
 
