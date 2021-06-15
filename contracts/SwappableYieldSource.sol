@@ -3,6 +3,7 @@
 pragma solidity ^0.7.6;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/SafeERC20Upgradeable.sol";
 import "@pooltogether/yield-source-interface/contracts/IYieldSource.sol";
@@ -29,6 +30,11 @@ contract SwappableYieldSource is IYieldSource, OwnableUpgradeable {
 
   /// @notice Yield source interface
   IYieldSource public yieldSource;
+
+  /// @notice Mock Initializer to prevent initialization right after deploying
+  function freeze() public initializer {
+    //no-op
+  }
 
   /// @notice Initializes the swappable yield source with the yieldSource address provided
   /// @param _yieldSource Address of yield source used to initialize this swappable yield source
@@ -64,9 +70,13 @@ contract SwappableYieldSource is IYieldSource, OwnableUpgradeable {
   }
 
   /// @notice Supplies tokens to the current yield source. Allows assets to be supplied on other user's behalf using the `to` param.
-  /// @param amount The amount of `token()` to be supplied
+  /// @param amount The amount of `depositToken()` to be supplied
   /// @param to The user whose balance will receive the tokens
   function supplyTokenTo(uint256 amount, address to) external override {
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken());
+
+    _depositToken.safeTransferFrom(msg.sender, address(this), amount);
+    _depositToken.safeApprove(address(yieldSource), amount);
     return yieldSource.supplyTokenTo(amount, to);
   }
 
@@ -74,33 +84,42 @@ contract SwappableYieldSource is IYieldSource, OwnableUpgradeable {
   /// @param amount The amount of `token()` to withdraw. Denominated in `token()` as above.
   /// @return The actual amount of tokens that were redeemed.
   function redeemToken(uint256 amount) external override returns (uint256) {
-    return yieldSource.redeemToken(amount);
+    IERC20Upgradeable _yieldSource = IERC20Upgradeable(address(yieldSource));
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken());
+
+    /// @dev TODO: fix error `revert ERC20: transfer amount exceeds allowance`
+    _yieldSource.safeApprove(address(yieldSource), amount);
+    _yieldSource.safeTransferFrom(msg.sender, address(this), amount);
+
+    /// @dev Swappable Yield Source need to have Yield Source tokens (eg: ptaDAI) to redeem
+    (uint256 balanceDiff) = yieldSource.redeemToken(amount);
+    _depositToken.safeTransfer(msg.sender, balanceDiff);
+
+    return balanceDiff;
   }
 
-  /// @notice Redeems token from yield source
-  /// @dev redeemToken returns balanceDiff which is equivalent to the yield source balance before redeeming minus redeemAmount
-  /// @return True if operation is successful and balanceDiff equals redeemAmount
-  function _redeemFromYieldSource(uint256 redeemAmount) internal returns (bool) {
-    require(yieldSource.redeemToken(redeemAmount) == redeemAmount, "SwappableYieldSource/failed-to-withdraw");
+  /// @notice Set new yield source
+  /// @return true if operation is successful
+  function _setYieldSource(address newYieldSource) internal returns (bool) {
+    yieldSource = IYieldSource(newYieldSource);
     return true;
-  }
-
-  /// @notice Supplies token to new yield source
-  /// @return 0 if operation is successful
-  function _supplyToNewYieldSource(uint256 supplyAmount, address newYieldSource) internal returns (uint256) {
-    IERC20Upgradeable(yieldSource.depositToken()).safeApprove(newYieldSource, supplyAmount);
-    IYieldSource(newYieldSource).supplyTokenTo(supplyAmount, address(this));
-    return 0;
   }
 
   /// @notice Swap yieldSource for newYieldSource
-  /// @return True if operation is successful
-  function swapYieldSource(address newYieldSource) external onlyOwner returns (bool) {
-    uint256 balance = yieldSource.balanceOfToken(address(this));
-    _redeemFromYieldSource(balance);
-    require(_supplyToNewYieldSource(balance, newYieldSource) == 0, "SwappableYieldSource/failed-to-swap");
-    emit SwappedYieldSource(address(yieldSource), newYieldSource);
+  function swapYieldSource(address newYieldSource, address prizePool) external onlyOwner {
+    uint256 balance = yieldSource.balanceOfToken(msg.sender);
 
-    return true;
+    // IERC20Upgradeable(address(yieldSource)).safeTransferFrom(msg.sender, address(this), balance);
+    // IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken());
+
+    // IERC20Upgradeable(address(yieldSource)).safeTransferFrom(msg.sender, address(this), balance);
+    // yieldSource.redeemToken(balance);
+    // require(yieldSource.redeemToken(balance) == balance, "SwappableYieldSource/failed-to-redeem");
+
+    IERC20Upgradeable(yieldSource.depositToken()).safeApprove(newYieldSource, balance);
+    IYieldSource(newYieldSource).supplyTokenTo(balance, address(this));
+
+    require(_setYieldSource(newYieldSource), "SwappableYieldSource/failed-to-set");
+    emit SwappedYieldSource(address(yieldSource), newYieldSource);
   }
 }
