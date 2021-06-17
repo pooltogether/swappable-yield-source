@@ -16,30 +16,40 @@ import {
   CDAI_ADDRESS_MAINNET,
   LENDING_POOL_ADDRESSES_PROVIDER_REGISTRY_ADDRESS_MAINNET,
 } from '../Constant';
-import { action, increaseTime as increaseTimeHelper, info, success } from '../helpers';
+import {
+  action,
+  info,
+  success,
+  isTestEnvironment,
+  increaseTime as increaseTimeHelper,
+} from '../helpers';
 import { GenericProxyFactory, SwappableYieldSource as SwappableYieldSourceType } from '../types';
 
 export default task('fork:create-swappable-prize-pool', 'Create a Swappable Prize Pool').setAction(
   async (taskArguments, hre: HardhatRuntimeEnvironment) => {
-    const { artifacts, deployments, ethers, getChainId, getNamedAccounts } = hre;
+    const { artifacts, deployments, ethers, getChainId, getNamedAccounts, network } = hre;
     const { deploy } = deployments;
 
-    const { constants, BigNumber, getContractAt, getContractFactory, provider, utils } = ethers;
+    const { constants, getContractAt, provider, utils } = ethers;
     const { AddressZero } = constants;
     const { getBlock, getBlockNumber, getSigner, getTransactionReceipt } = provider;
     const { Interface, formatUnits, parseEther: toWei, parseUnits } = utils;
 
     const chainId = parseInt(await getChainId());
-    const network = getChainByChainId(chainId).network;
+    const networkName = getChainByChainId(chainId).network;
+
     const increaseTime = (time: number) => increaseTimeHelper(hre, time);
 
-    action(`Creating Yield Source Prize Pool on ${network}...`);
+    action(
+      `Creating Yield Source Prize Pool on ${networkName} (${
+        isTestEnvironment(network) ? 'local' : 'remote'
+      })...`,
+    );
 
     const { deployer, genericProxyFactory } = await getNamedAccounts();
     const contractsOwner = getSigner(deployer);
 
-    const allDeployments = await deployments.all();
-    const { SwappableYieldSource: swappableYieldSourceProxyContract } = allDeployments;
+    const { SwappableYieldSource: swappableYieldSourceProxyContract } = await deployments.all();
 
     info(`Deployer: ${deployer}`);
 
@@ -95,7 +105,13 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
 
     const swappableYieldSourceConstructorArgs = swappableYieldSourceInterface.encodeFunctionData(
       swappableYieldSourceInterface.getFunction('initialize'),
-      [aaveDAIYieldSourceAddress, contractsOwner._address],
+      [
+        aaveDAIYieldSourceAddress,
+        18,
+        'swsDAI',
+        'PoolTogether Swappable Yield Source DAI',
+        contractsOwner._address,
+      ],
     );
 
     const createSwappableYieldSourceResult = await genericProxyFactoryContract.create(
@@ -184,19 +200,18 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
 
     const ticketAddress = await prizeStrategy.ticket();
     const daiContract = await getContractAt(dai.abi, dai.address, contractsOwner);
-    const daiDecimals = await daiContract.decimals()
+    const daiDecimals = await daiContract.decimals();
     const depositAmount = parseUnits('100', daiDecimals);
 
     await daiContract.approve(prizePool.address, depositAmount);
 
-    action(`Depositing ${formatUnits(depositAmount, daiDecimals)} ${dai.symbol} for ${contractsOwner._address}, ticket ${ticketAddress}...`);
-
-    await prizePool.depositTo(
-      contractsOwner._address,
-      depositAmount,
-      ticketAddress,
-      AddressZero,
+    action(
+      `Depositing ${formatUnits(depositAmount, daiDecimals)} ${dai.symbol} for ${
+        contractsOwner._address
+      }, ticket ${ticketAddress}...`,
     );
+
+    await prizePool.depositTo(contractsOwner._address, depositAmount, ticketAddress, AddressZero);
 
     success('Deposit Successful!');
 
@@ -205,13 +220,13 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
     action('Starting award...');
     await increaseTime(60);
     await prizeStrategy.startAward();
-    await increaseTime(1);
+    await increaseTime(60);
 
     action('Completing award...');
     const awardTx = await prizeStrategy.completeAward();
     const awardReceipt = await getTransactionReceipt(awardTx.hash);
 
-    const awardLogs = awardReceipt.logs.map((log:any) => {
+    const awardLogs = awardReceipt.logs.map((log: any) => {
       try {
         return prizePool.interface.parseLog(log);
       } catch (e) {
@@ -219,7 +234,7 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
       }
     });
 
-    awardReceipt.logs.map((log:any) => {
+    awardReceipt.logs.map((log: any) => {
       try {
         return prizeStrategy.interface.parseLog(log);
       } catch (e) {
@@ -227,7 +242,7 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
       }
     });
 
-    const awardedEvent = awardLogs.find((event:any) => event && event.name === 'Awarded');
+    const awardedEvent = awardLogs.find((event: any) => event && event.name === 'Awarded');
 
     if (awardedEvent) {
       success(`Awarded ${formatUnits(awardedEvent?.args.amount, daiDecimals)} ${dai.symbol}!`);
@@ -235,48 +250,64 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
 
     action('Deploying Compound DAI Yield Source...');
 
-    const cDaiYieldSourceResult = await deploy("cDaiYieldSource", {
-      args: [
-        CDAI_ADDRESS_MAINNET
-      ],
+    const cDaiYieldSourceResult = await deploy('cDaiYieldSource', {
+      args: [CDAI_ADDRESS_MAINNET],
       contract: CTokenYieldSourceArtifact,
       from: deployer,
-      skipIfAlreadyDeployed: true
-    })
+      skipIfAlreadyDeployed: true,
+    });
 
     success(`Deployed Compound DAI Yield Source! ${cDaiYieldSourceResult.address}`);
-    await increaseTime(60); // we increase time to make sure swap is successful
+    await increaseTime(300); // we increase time to make sure swap is successful
     action('Swapping Aave DAI Yield Source for Compound DAI Yield Source...');
 
     const ticket = await getContractAt(ControlledTokenAbi, ticketAddress, contractsOwner);
+    const ticketSymbol = await ticket.callStatic.symbol();
+    const userTicketBalanceBefore = await ticket.callStatic.balanceOf(contractsOwner._address);
+    const userDAIBalanceBefore = await daiContract.callStatic.balanceOf(contractsOwner._address);
 
-    const userBalanceBefore = await ticket.callStatic.balanceOf(contractsOwner._address);
-    console.log('userBalanceBefore', formatUnits(userBalanceBefore));
+    info(
+      `User tickets balance before withdrawing ${formatUnits(
+        userTicketBalanceBefore,
+      )} ${ticketSymbol}`,
+    );
+    info(`User DAI balance before withdrawing ${formatUnits(userDAIBalanceBefore)} ${dai.symbol}`);
 
-    const swappableYieldSourceContract = await getContractAt(
+    const swappableYieldSourceContract = (await getContractAt(
       'SwappableYieldSource',
       swappableYieldSourceAddress,
-      contractsOwner
-    ) as unknown as SwappableYieldSourceType;
+      contractsOwner,
+    )) as unknown as SwappableYieldSourceType;
 
-    info(`Yield Source address before swap ${await swappableYieldSourceContract.callStatic.yieldSource()}`);
-    info(`PrizePool balanceOfToken before swap ${formatUnits((await swappableYieldSourceContract.callStatic.balanceOfToken(prizePool.address)))}`);
-    info(`Swappable Yield Source balanceOfToken before swap ${formatUnits((await swappableYieldSourceContract.callStatic.balanceOfToken(swappableYieldSourceAddress)))}`);
+    info(
+      `Yield Source address before swap ${await swappableYieldSourceContract.callStatic.yieldSource()}`,
+    );
+    info(
+      `PrizePool balanceOfToken before swap ${formatUnits(
+        await swappableYieldSourceContract.callStatic.balanceOfToken(prizePool.address),
+      )}`,
+    );
 
-    // await swappableYieldSourceContract.swapYieldSource(cDaiYieldSourceResult.address, prizePool.address);
+    await swappableYieldSourceContract.swapYieldSource(cDaiYieldSourceResult.address);
 
-    info(`Yield Source address after swap ${await swappableYieldSourceContract.callStatic.yieldSource()}`);
-    info(`PrizePool balanceOfToken after swap ${formatUnits((await swappableYieldSourceContract.callStatic.balanceOfToken(prizePool.address)))}`);
-    info(`Swappable Yield Source balanceOfToken after swap ${formatUnits((await swappableYieldSourceContract.callStatic.balanceOfToken(swappableYieldSourceAddress)))}`);
+    info(
+      `Yield Source address after swap ${await swappableYieldSourceContract.callStatic.yieldSource()}`,
+    );
+    info(
+      `PrizePool balanceOfToken after swap ${formatUnits(
+        await swappableYieldSourceContract.callStatic.balanceOfToken(prizePool.address),
+      )}`,
+    );
 
     success('Swapped Aave DAI Yield Source for Compound DAI Yield Source!');
 
     action('Withdrawing from PrizePool...');
     const withdrawalAmount = depositAmount.div(2);
-    const earlyExitFee = await prizePool.callStatic.calculateEarlyExitFee(contractsOwner._address, ticketAddress, withdrawalAmount);
-
-    // const userBalanceAfter = await ticket.callStatic.balanceOf(contractsOwner._address);
-    // console.log('userBalanceAfter', formatUnits(userBalanceAfter));
+    const earlyExitFee = await prizePool.callStatic.calculateEarlyExitFee(
+      contractsOwner._address,
+      ticketAddress,
+      withdrawalAmount,
+    );
 
     const withdrawTx = await prizePool.withdrawInstantlyFrom(
       contractsOwner._address,
@@ -285,9 +316,8 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
       earlyExitFee.exitFee,
     );
 
-    // await new Promise(r => setTimeout(r, 220000));
     const withdrawReceipt = await getTransactionReceipt(withdrawTx.hash);
-    const withdrawLogs = withdrawReceipt.logs.map((log:any) => {
+    const withdrawLogs = withdrawReceipt.logs.map((log: any) => {
       try {
         return prizePool.interface.parseLog(log);
       } catch (e) {
@@ -295,12 +325,24 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
       }
     });
 
-    const withdrawn = withdrawLogs.find((event:any) => event && event.name === 'InstantWithdrawal');
+    const withdrawn = withdrawLogs.find(
+      (event: any) => event && event.name === 'InstantWithdrawal',
+    );
     success(`Withdrawn ${formatUnits(withdrawn?.args?.redeemed)} ${dai.symbol}!`);
     info(`Exit fee was ${withdrawn?.args?.exitFee} ${dai.symbol}`);
 
+    const userTicketBalanceAfter = await ticket.callStatic.balanceOf(contractsOwner._address);
+    const userDAIBalanceAfter = await daiContract.callStatic.balanceOf(contractsOwner._address);
+
+    info(
+      `User tickets balance after withdrawing ${formatUnits(
+        userTicketBalanceAfter,
+      )} ${ticketSymbol}`,
+    );
+    info(`User DAI balance after withdrawing ${formatUnits(userDAIBalanceAfter)} ${dai.symbol}`);
+
     await prizePool.captureAwardBalance();
-    const awardBalance = await prizePool.callStatic.awardBalance();
-    info(`Current awardable balance is ${awardBalance} ${dai.symbol}`);
+    const awardableBalance = formatUnits(await prizePool.callStatic.awardBalance());
+    info(`Current awardable balance is ${awardableBalance} ${dai.symbol}`);
   },
 );

@@ -4,7 +4,13 @@ import { writeFileSync } from 'fs';
 import { HardhatRuntimeEnvironment } from 'hardhat/types';
 import { DeployFunction, DeploymentSubmission, DeployResult } from 'hardhat-deploy/types';
 
-import { action, alert, info, success } from '../helpers';
+import {
+  action,
+  alert,
+  info,
+  success,
+  isTestEnvironment as isTestEnvironmentHelper,
+} from '../helpers';
 import { AAVE_DAI_YIELD_SOURCE_KOVAN } from '../Constant';
 
 const displayResult = (name: string, result: DeployResult) => {
@@ -31,9 +37,7 @@ const deployFunction: DeployFunction = async function (hre: HardhatRuntimeEnviro
   const chainId = parseInt(await getChainId());
   const isNotTestChainId = chainId !== 31337 && chainId !== 1337;
   const networkName = isNotTestChainId ? getChainByChainId(chainId)?.network : 'Test';
-  const isTestEnvironment = network?.config
-    ? network.config?.tags?.[0] === 'test'
-    : network?.tags?.test;
+  const isTestEnvironment = isTestEnvironmentHelper(network);
 
   info(`Network: ${networkName} (${isTestEnvironment ? 'local' : 'remote'})`);
   info(`Deployer: ${deployer}`);
@@ -96,7 +100,13 @@ const deployFunction: DeployFunction = async function (hre: HardhatRuntimeEnviro
 
   const constructorArgs = swappableYieldSourceInterface.encodeFunctionData(
     swappableYieldSourceInterface.getFunction('initialize'),
-    [AAVE_DAI_YIELD_SOURCE_KOVAN, multisig],
+    [
+      AAVE_DAI_YIELD_SOURCE_KOVAN,
+      18,
+      'swsDAI',
+      'PoolTogether Swappable Yield Source DAI',
+      multisig,
+    ],
   );
 
   const aaveDAISwappableYieldSourceResult = await proxyFactoryContract.create(

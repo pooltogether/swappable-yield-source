@@ -23,7 +23,7 @@ The Swappable Yield Source needs to be initialized with a PoolTogether Yield Sou
 Yield Source addresses are available in `Constants.ts`.
 
 To initialize the Swappable Yield Source with the Yield Source you want to use, you need to modify the following line in `deploy/deploy.ts`:
-https://github.com/pooltogether/swappable-yield-source/blob/71b6810f821ff8eadc2b11238524054c3f5b836f/deploy/deploy.ts#L80
+https://github.com/pooltogether/swappable-yield-source/blob/71b6810f821ff8eadc2b11238524054c3f5b836f/deploy/deploy.ts#L104
 
 
 To deploy, run:
