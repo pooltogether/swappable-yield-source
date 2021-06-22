@@ -60,7 +60,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Yield source interface.
   IYieldSource public yieldSource;
 
-  /// @notice Mock Initializer to prevent initialization by a third person right after deploying.
+  /// @notice Mock Initializer to initialize implementations used by minimal proxies.
   function freeze() public initializer {
     //no-op
   }
