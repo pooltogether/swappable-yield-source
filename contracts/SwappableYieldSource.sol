@@ -29,24 +29,21 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     address indexed owner
   );
 
-  /// @notice Emitted when a new yield source has been successfuly set.
+  /// @notice Emitted when a yield source has been successfuly set.
   event SwappableYieldSourceSet(
-    address indexed oldYieldSource,
-    address indexed newYieldSource
+    address indexed yieldSource
   );
 
-  /// @notice Emitted when funds are successfully transferred from old yield source to new yield source.
+  /// @notice Emitted when funds are successfully transferred from specified yield source.
   event FundsTransferred(
-    address indexed oldYieldSource,
-    address indexed newYieldSource,
+    address indexed yieldSource,
     uint256 amount
   );
 
   /// @notice Emitted when yield source has been successfuly swapped.
   event YieldSourceSwapped(
-    address indexed oldYieldSource,
-    address indexed newYieldSource,
-    uint256 amount
+    address indexed previousYieldSource,
+    address indexed yieldSource
   );
 
   /// @notice Emitted when ERC20 tokens other than yield source's tokens are withdrawn from the swappable yield source.
@@ -66,9 +63,9 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   }
 
   /// @notice Hack to determine if address passed is an actual yield source.
-  /// @param yieldSourceToCheck Address of the yield source to check.
-  function _requireYieldSource(IYieldSource yieldSourceToCheck) internal {
-    (bool succeeded,) = address(yieldSourceToCheck).staticcall(abi.encode(yieldSourceToCheck.depositToken.selector));
+  /// @param _yieldSource Yield source address to check.
+  function _requireYieldSource(IYieldSource _yieldSource) internal view {
+    (bool succeeded,) = address(_yieldSource).staticcall(abi.encode(_yieldSource.depositToken.selector));
     require(succeeded, "SwappableYieldSource/invalid-yield-source");
   }
 
@@ -208,19 +205,25 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     return balanceDiff;
   }
 
+  /// @notice Determine if passed yield source is different from current yield source.
+  /// @param _yieldSource Yield source address to check.
+  function _requireDifferentYieldSource(address _yieldSource) internal view {
+    require(_yieldSource != address(yieldSource), "SwappableYieldSource/same-yield-source");
+  }
+
   /// @notice Set new yield source.
   /// @param newYieldSource New yield source address to set.
   /// @return true if operation is successful.
   function _setYieldSource(address newYieldSource) internal returns (bool) {
     IYieldSource _newYieldSource = IYieldSource(newYieldSource);
-    IYieldSource _oldYieldSource = yieldSource;
+    IYieldSource _currentYieldSource = yieldSource;
 
-    require(newYieldSource != address(_oldYieldSource), "SwappableYieldSource/same-yield-source");
-    require(_newYieldSource.depositToken() == _oldYieldSource.depositToken(), "SwappableYieldSource/different-deposit-token");
+    _requireDifferentYieldSource(newYieldSource);
+    require(_newYieldSource.depositToken() == _currentYieldSource.depositToken(), "SwappableYieldSource/different-deposit-token");
 
     yieldSource = _newYieldSource;
 
-    emit SwappableYieldSourceSet(address(_oldYieldSource), newYieldSource);
+    emit SwappableYieldSourceSet(address(yieldSource));
     return true;
   }
 
@@ -231,47 +234,47 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     _setYieldSource(newYieldSource);
   }
 
-  /// @notice Set new yield source.
+  /// @notice Transfer funds from specified yield source to current yield source.
   /// @dev We check that the `balanceDiff` transferred is at least equal or superior to the `amount` requested.
   /// @dev `balanceDiff` can be superior to `amount` if yield has been accruing between redeeming and checking for a mathematical error.
-  /// @param oldYieldSource Old yield source address to transfer funds from.
-  /// @param newYieldSource New yield source address to transfer funds to.
-  /// @param amount Amount of funds to transfer from old yield source to new yield source.
+  /// @param _yieldSource Yield source address to transfer funds from.
+  /// @param amount Amount of funds to transfer from passed yield source to current yield source.
   /// @return true if operation is successful.
-  function _transferFunds(address oldYieldSource, address newYieldSource, uint256 amount) internal returns (bool) {
-    IYieldSource _oldYieldSource = IYieldSource(oldYieldSource);
-    IYieldSource _newYieldSource = IYieldSource(newYieldSource);
+  function _transferFunds(address _yieldSource, uint256 amount) internal returns (bool) {
+    IYieldSource _iYieldSource = IYieldSource(_yieldSource);
 
-    (uint256 balanceDiff) = _oldYieldSource.redeemToken(amount);
+    (uint256 balanceDiff) = _iYieldSource.redeemToken(amount);
 
     require(amount <= balanceDiff, "SwappableYieldSource/transfer-amount-different");
 
-    IERC20Upgradeable(_newYieldSource.depositToken()).safeApprove(newYieldSource, balanceDiff);
-    _newYieldSource.supplyTokenTo(balanceDiff, address(this));
+    IERC20Upgradeable(_iYieldSource.depositToken()).safeApprove(address(yieldSource), balanceDiff);
+    yieldSource.supplyTokenTo(balanceDiff, address(this));
 
-    emit FundsTransferred(oldYieldSource, newYieldSource, amount);
+    emit FundsTransferred(_yieldSource, amount);
     return true;
   }
 
-  /// @notice Transfer funds from old yield source to new yield source.
-  /// @param oldYieldSource Old yield source address to transfer funds from.
-  /// @param newYieldSource New yield source address to transfer funds to.
-  /// @param amount Amount of funds to transfer from old yield source to new yield source.
-  function transferFunds(address oldYieldSource, address newYieldSource, uint256 amount) external {
-    _transferFunds(oldYieldSource, newYieldSource, amount);
+  /// @notice Transfer funds from specified yield source to current yield source.
+  /// @dev We only verify it is a different yield source in the public function cause we already check for it in `_setYieldSource` function.
+  /// @param _yieldSource Yield source address to transfer funds from.
+  /// @param amount Amount of funds to transfer from passed yield source to current yield source.
+  function transferFunds(address _yieldSource, uint256 amount) external {
+    _requireDifferentYieldSource(_yieldSource);
+    _transferFunds(_yieldSource, amount);
   }
 
   /// @notice Swap current yield source for new yield source.
   /// @dev This function is only callable by the owner or asset manager.
+  /// @dev We set a new yield source and then transfer funds from the now previous yield source to the new current yield source.
   /// @param newYieldSource New yield source address to set and transfer funds to.
   function swapYieldSource(address newYieldSource) external onlyOwnerOrAssetManager {
-    address _oldYieldSource = address(yieldSource);
-    uint256 balance = yieldSource.balanceOfToken(address(this));
+    address _currentYieldSource = address(yieldSource);
+    uint256 balance = IYieldSource(_currentYieldSource).balanceOfToken(address(this));
 
     require(_setYieldSource(newYieldSource), "SwappableYieldSource/failed-to-set-yield-source");
-    require(_transferFunds(_oldYieldSource, newYieldSource, balance), "SwappableYieldSource/failed-to-transfer-funds");
+    require(_transferFunds(_currentYieldSource, balance), "SwappableYieldSource/failed-to-transfer-funds");
 
-    emit YieldSourceSwapped(_oldYieldSource, address(yieldSource), balance);
+    emit YieldSourceSwapped(_currentYieldSource, address(yieldSource));
   }
 
   /// @notice Transfer ERC20 tokens other than the yield source's tokens held by this contract to the recipient address.
