@@ -112,13 +112,14 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @return Number of shares.
   function _tokenToShares(uint256 tokens) internal returns (uint256) {
     uint256 shares = 0;
+    uint256 _totalSupply = totalSupply();
 
-    if (totalSupply() == 0) {
+    if (_totalSupply == 0) {
       shares = tokens;
     } else {
       // rate = tokens / shares
       // shares = tokens * (totalShares / swappableYieldSourceTotalSupply)
-      uint256 exchangeMantissa = FixedPoint.calculateMantissa(totalSupply(), yieldSource.balanceOfToken(address(this)));
+      uint256 exchangeMantissa = FixedPoint.calculateMantissa(_totalSupply, yieldSource.balanceOfToken(address(this)));
       shares = FixedPoint.multiplyUintByMantissa(tokens, exchangeMantissa);
     }
 
@@ -130,12 +131,13 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @return Number of tokens.
   function _sharesToToken(uint256 shares) internal returns (uint256) {
     uint256 tokens = 0;
+    uint256 _totalSupply = totalSupply();
 
-    if (totalSupply() == 0) {
+    if (_totalSupply == 0) {
       tokens = shares;
     } else {
       // tokens = shares * (yieldSourceTotalSupply / totalShares)
-      uint256 exchangeMantissa = FixedPoint.calculateMantissa(yieldSource.balanceOfToken(address(this)), totalSupply());
+      uint256 exchangeMantissa = FixedPoint.calculateMantissa(yieldSource.balanceOfToken(address(this)), _totalSupply);
       tokens = FixedPoint.multiplyUintByMantissa(shares, exchangeMantissa);
     }
 
