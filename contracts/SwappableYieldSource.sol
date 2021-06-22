@@ -65,6 +65,13 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     //no-op
   }
 
+  /// @notice Hack to determine if address passed is an actual yield source.
+  /// @param yieldSourceToCheck Address of the yield source to check.
+  function _requireYieldSource(IYieldSource yieldSourceToCheck) internal {
+    (bool succeeded,) = address(yieldSourceToCheck).staticcall(abi.encode(yieldSourceToCheck.depositToken.selector));
+    require(succeeded, "SwappableYieldSource/invalid-yield-source");
+  }
+
   /// @notice Initializes the swappable yield source with the yieldSource address provided.
   /// @param _yieldSource Address of yield source used to initialize this swappable yield source.
   /// @param _decimals Number of decimals the shares (inherited ERC20) will have.  Same as underlying asset to ensure same ExchangeRates.
@@ -80,7 +87,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   ) public initializer returns (bool) {
     yieldSource = _yieldSource;
 
-    _isYieldSource(_yieldSource);
+    _requireYieldSource(_yieldSource);
 
     __Ownable_init();
     transferOwnership(_owner);
@@ -98,13 +105,6 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     );
 
     return true;
-  }
-
-  /// @notice Hack to determine if address passed is an actual yield source.
-  /// @param yieldSourceToCheck Address of the yield source to check.
-  function _isYieldSource(IYieldSource yieldSourceToCheck) internal {
-    (bool succeeded,) = address(yieldSourceToCheck).staticcall(abi.encode(yieldSourceToCheck.depositToken.selector));
-    require(succeeded, "SwappableYieldSource/invalid-yield-source");
   }
 
   /// @notice Calculates the number of shares that should be minted or burned when a user deposit or withdraw.
@@ -217,7 +217,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
     require(newYieldSource != _oldYieldSource, "SwappableYieldSource/same-yield-source");
 
-    _isYieldSource(_newYieldSource);
+    _requireYieldSource(_newYieldSource);
     yieldSource = _newYieldSource;
 
     emit SwappableYieldSourceSet(_oldYieldSource, newYieldSource);
