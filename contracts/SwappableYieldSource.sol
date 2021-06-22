@@ -171,7 +171,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param amount Amount of `depositToken()` to be supplied.
   /// @param to User whose balance will receive the tokens.
   function supplyTokenTo(uint256 amount, address to) external override nonReentrant {
-    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken());
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
 
     _depositToken.safeTransferFrom(msg.sender, address(this), amount);
     _depositToken.safeApprove(address(yieldSource), amount);
@@ -198,7 +198,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param amount Amount of `depositToken()` to withdraw.
   /// @return Actual amount of tokens that were redeemed.
   function redeemToken(uint256 amount) external override nonReentrant returns (uint256) {
-    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken());
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
 
     (uint256 balanceDiff) = yieldSource.redeemToken(amount);
     _depositToken.safeTransferFrom(address(this), msg.sender, balanceDiff);
