@@ -213,14 +213,14 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @return true if operation is successful.
   function _setYieldSource(address newYieldSource) internal returns (bool) {
     IYieldSource _newYieldSource = IYieldSource(newYieldSource);
-    address _oldYieldSource = address(yieldSource);
+    IYieldSource _oldYieldSource = yieldSource;
 
-    require(newYieldSource != _oldYieldSource, "SwappableYieldSource/same-yield-source");
+    require(newYieldSource != address(_oldYieldSource), "SwappableYieldSource/same-yield-source");
+    require(_newYieldSource.depositToken() == _oldYieldSource.depositToken(), "SwappableYieldSource/different-deposit-token");
 
-    _requireYieldSource(_newYieldSource);
     yieldSource = _newYieldSource;
 
-    emit SwappableYieldSourceSet(_oldYieldSource, newYieldSource);
+    emit SwappableYieldSourceSet(address(_oldYieldSource), newYieldSource);
     return true;
   }
 
