@@ -75,6 +75,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param _symbol Token symbol for the underlying ERC20 shares (eg: swsDAI).
   /// @param _name Token name for the underlying ERC20 shares (eg: PoolTogether Swappable Yield Source DAI).
   /// @param _owner Swappable yield source owner.
+  /// @return true if operation is successful.
   function initialize(
     IYieldSource _yieldSource,
     uint8 _decimals,
@@ -197,7 +198,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   function redeemToken(uint256 amount) external override nonReentrant returns (uint256) {
     IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
 
-    (uint256 balanceDiff) = yieldSource.redeemToken(amount);
+    uint256 balanceDiff = yieldSource.redeemToken(amount);
     _depositToken.safeTransferFrom(address(this), msg.sender, balanceDiff);
 
     _burnShares(amount);
@@ -213,8 +214,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
   /// @notice Set new yield source.
   /// @param newYieldSource New yield source address to set.
-  /// @return true if operation is successful.
-  function _setYieldSource(address newYieldSource) internal returns (bool) {
+  function _setYieldSource(address newYieldSource) internal {
     IYieldSource _newYieldSource = IYieldSource(newYieldSource);
     IYieldSource _currentYieldSource = yieldSource;
 
@@ -224,14 +224,15 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     yieldSource = _newYieldSource;
 
     emit SwappableYieldSourceSet(address(yieldSource));
-    return true;
   }
 
   /// @notice Set new yield source.
   /// @dev This function is only callable by the owner or asset manager.
   /// @param newYieldSource New yield source address to set.
-  function setYieldSource(address newYieldSource) external onlyOwnerOrAssetManager {
+  /// @return true if operation is successful.
+  function setYieldSource(address newYieldSource) external onlyOwnerOrAssetManager returns (bool) {
     _setYieldSource(newYieldSource);
+    return true;
   }
 
   /// @notice Transfer funds from specified yield source to current yield source.
@@ -239,11 +240,10 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @dev `balanceDiff` can be superior to `amount` if yield has been accruing between redeeming and checking for a mathematical error.
   /// @param _yieldSource Yield source address to transfer funds from.
   /// @param amount Amount of funds to transfer from passed yield source to current yield source.
-  /// @return true if operation is successful.
-  function _transferFunds(address _yieldSource, uint256 amount) internal returns (bool) {
+  function _transferFunds(address _yieldSource, uint256 amount) internal {
     IYieldSource _iYieldSource = IYieldSource(_yieldSource);
 
-    (uint256 balanceDiff) = _iYieldSource.redeemToken(amount);
+    uint256 balanceDiff = _iYieldSource.redeemToken(amount);
 
     require(amount <= balanceDiff, "SwappableYieldSource/transfer-amount-different");
 
@@ -251,30 +251,33 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     yieldSource.supplyTokenTo(balanceDiff, address(this));
 
     emit FundsTransferred(_yieldSource, amount);
-    return true;
   }
 
   /// @notice Transfer funds from specified yield source to current yield source.
   /// @dev We only verify it is a different yield source in the public function cause we already check for it in `_setYieldSource` function.
   /// @param _yieldSource Yield source address to transfer funds from.
   /// @param amount Amount of funds to transfer from passed yield source to current yield source.
-  function transferFunds(address _yieldSource, uint256 amount) external {
+  /// @return true if operation is successful.
+  function transferFunds(address _yieldSource, uint256 amount) external returns (bool) {
     _requireDifferentYieldSource(_yieldSource);
     _transferFunds(_yieldSource, amount);
+    return true;
   }
 
   /// @notice Swap current yield source for new yield source.
   /// @dev This function is only callable by the owner or asset manager.
   /// @dev We set a new yield source and then transfer funds from the now previous yield source to the new current yield source.
   /// @param newYieldSource New yield source address to set and transfer funds to.
-  function swapYieldSource(address newYieldSource) external onlyOwnerOrAssetManager {
+  /// @return true if operation is successful.
+  function swapYieldSource(address newYieldSource) external onlyOwnerOrAssetManager returns (bool) {
     address _currentYieldSource = address(yieldSource);
     uint256 balance = IYieldSource(_currentYieldSource).balanceOfToken(address(this));
 
-    require(_setYieldSource(newYieldSource), "SwappableYieldSource/failed-to-set-yield-source");
-    require(_transferFunds(_currentYieldSource, balance), "SwappableYieldSource/failed-to-transfer-funds");
+    _setYieldSource(newYieldSource);
+    _transferFunds(_currentYieldSource, balance);
 
     emit YieldSourceSwapped(_currentYieldSource, address(yieldSource));
+    return true;
   }
 
   /// @notice Transfer ERC20 tokens other than the yield source's tokens held by this contract to the recipient address.
@@ -282,9 +285,11 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param erc20Token ERC20 token to transfer.
   /// @param to Recipient of the tokens.
   /// @param amount Amount of tokens to transfer.
-  function transferERC20(IERC20Upgradeable erc20Token, address to, uint256 amount) external onlyOwnerOrAssetManager {
+  /// @return true if operation is successful.
+  function transferERC20(IERC20Upgradeable erc20Token, address to, uint256 amount) external onlyOwnerOrAssetManager returns (bool) {
     require(address(erc20Token) != address(yieldSource), "SwappableYieldSource/yield-source-token-transfer-not-allowed");
     erc20Token.safeTransfer(to, amount);
     emit TransferredERC20(msg.sender, to, amount, erc20Token);
+    return true;
   }
 }
