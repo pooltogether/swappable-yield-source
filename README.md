@@ -8,6 +8,9 @@
 
 # PoolTogether Swappable Yield Source
 
+[![Mainnet fork](https://github.com/pooltogether/swappable-yield-source/actions/workflows/fork.yml/badge.svg)](https://github.com/pooltogether/swappable-yield-source/actions/workflows/fork.yml)
+[![Coveralls](https://github.com/pooltogether/swappable-yield-source/actions/workflows/coveralls.yml/badge.svg)](https://github.com/pooltogether/swappable-yield-source/actions/workflows/coveralls.yml)
+[![Coverage Status](https://coveralls.io/repos/github/pooltogether/swappable-yield-source/badge.svg?branch=main)](https://coveralls.io/github/pooltogether/swappable-yield-source?branch=main)
 [![built-with openzeppelin](https://img.shields.io/badge/built%20with-OpenZeppelin-3677FF)](https://docs.openzeppelin.com/)
 
 Wraps any [PoolTogether Yield Source](https://docs.pooltogether.com/protocol/yield-sources) and adds the ability to swap between any PoolTogether Yield Source.
@@ -99,6 +102,12 @@ In another window, start the scripts to deploy and create a Aave Yield Source Pr
 
 ```
 yarn run-fork
+```
+
+You can also run these commands concurrently with:
+
+```
+yarn mainnet-fork
 ```
 
 ### Deploy
