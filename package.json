@@ -7,7 +7,7 @@
   "license": "GPL-3.0",
   "scripts": {
     "clean": "rm -rf cache/ artifacts/",
-    "compile": "yarn clean && hardhat --show-stack-traces --max-memory 8192 compile",
+    "compile": "hardhat --show-stack-traces --max-memory 8192 compile",
     "coverage": "HIDE_DEPLOY_LOG=true OPTIMIZER_DISABLED=true hardhat coverage --network coverage",
     "create-prize-pool": "hardhat --network localhost fork:create-swappable-prize-pool",
     "deploy": "hardhat deploy --write true --network",

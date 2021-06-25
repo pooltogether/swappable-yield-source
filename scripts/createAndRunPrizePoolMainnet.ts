@@ -23,7 +23,6 @@ import {
   isTestEnvironment,
   increaseTime as increaseTimeHelper,
 } from '../helpers';
-import { GenericProxyFactory, SwappableYieldSource as SwappableYieldSourceType } from '../types';
 
 export default task('fork:create-swappable-prize-pool', 'Create a Swappable Prize Pool').setAction(
   async (taskArguments, hre: HardhatRuntimeEnvironment) => {
@@ -55,10 +54,10 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
 
     action('Deploying Aave DAI Yield Source...');
 
-    const genericProxyFactoryContract = (await getContractAt(
+    const genericProxyFactoryContract = await getContractAt(
       'GenericProxyFactory',
       genericProxyFactory,
-    )) as GenericProxyFactory;
+    );
 
     const aTokenYieldSourceContract = await getContractAt(
       ATokenYieldSourceAbi,
@@ -273,11 +272,11 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
     );
     info(`User DAI balance before withdrawing ${formatUnits(userDAIBalanceBefore)} ${dai.symbol}`);
 
-    const swappableYieldSourceContract = (await getContractAt(
+    const swappableYieldSourceContract = await getContractAt(
       'SwappableYieldSource',
       swappableYieldSourceAddress,
       contractsOwner,
-    )) as unknown as SwappableYieldSourceType;
+    );
 
     info(
       `Yield Source address before swap ${await swappableYieldSourceContract.callStatic.yieldSource()}`,
