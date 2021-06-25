@@ -257,7 +257,7 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
     });
 
     success(`Deployed Compound DAI Yield Source! ${cDaiYieldSourceResult.address}`);
-    await increaseTime(300); // we increase time to make sure swap is successful
+    await increaseTime(420); // we increase time to make sure swap is successful
     action('Swapping Aave DAI Yield Source for Compound DAI Yield Source...');
 
     const ticket = await getContractAt(ControlledTokenAbi, ticketAddress, contractsOwner);

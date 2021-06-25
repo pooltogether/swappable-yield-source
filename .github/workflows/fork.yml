@@ -1,0 +1,23 @@
+name: Mainnet fork
+
+on: ["push", "pull_request"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js 16.x
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+      - name: yarn, compile, start & run fork
+        env:
+          HDWALLET_MNEMONIC: ${{ secrets.HDWALLET_MNEMONIC }}
+          ALCHEMY_URL: ${{ secrets.ALCHEMY_URL }}
+          INFURA_API_KEY: ${{ secrets.INFURA_API_KEY }}
+          FORK_ENABLED: ${{ secrets.FORK_ENABLED }}
+        run: |
+          yarn
+          yarn compile
+          yarn mainnet-fork
