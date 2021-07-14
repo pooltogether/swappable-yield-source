@@ -206,12 +206,12 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   function redeemToken(uint256 amount) external override nonReentrant returns (uint256) {
     IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
 
-    uint256 balanceDiff = yieldSource.redeemToken(amount);
-    _depositToken.safeTransferFrom(address(this), msg.sender, balanceDiff);
-
     _burnShares(amount);
 
-    return balanceDiff;
+    uint256 redeemableBalance = yieldSource.redeemToken(amount);
+    _depositToken.safeTransferFrom(address(this), msg.sender, redeemableBalance);
+
+    return redeemableBalance;
   }
 
   /// @notice Determine if passed yield source is different from current yield source.

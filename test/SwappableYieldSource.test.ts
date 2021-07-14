@@ -277,18 +277,11 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should not be able to redeem assets if balance is 0', async () => {
-      const zeroBalance = toWei('0');
-      const revertReason = 'ATokenYieldSource/shares-equal-zero';
-
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(zeroBalance);
-
-      await yieldSource.mock.redeemToken.withArgs(redeemAmount).revertsWithReason(revertReason);
+      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('0'));
 
       await expect(
         swappableYieldSource.connect(yieldSourceOwner).redeemToken(redeemAmount),
-      ).to.be.revertedWith(revertReason);
+      ).to.be.revertedWith('ERC20: burn amount exceeds balance');
     });
 
     it('should fail to redeem if amount superior to balance', async () => {
