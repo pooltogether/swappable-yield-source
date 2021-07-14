@@ -157,7 +157,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   function _mintShares(uint256 mintAmount, address to) internal {
     uint256 shares = _tokenToShares(mintAmount);
 
-    require(shares > 0, "SwappableYieldSource/shares-equal-zero");
+    require(shares > 0, "SwappableYieldSource/shares-gt-zero");
 
     _mint(to, shares);
   }

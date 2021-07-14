@@ -40,7 +40,7 @@ abstract contract AssetManager is ContextUpgradeable, OwnableUpgradeable {
      * @dev Throws if called by any account other than the owner or asset manager.
      */
     modifier onlyOwnerOrAssetManager() {
-        require(assetManager() == _msgSender() || owner() == _msgSender(), "onlyOwnerOrAssetManager: caller is not owner or asset manager");
+        require(assetManager() == _msgSender() || owner() == _msgSender(), "onlyOwnerOrAssetManager/owner-or-manager");
         _;
     }
 
