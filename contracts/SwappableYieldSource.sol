@@ -117,7 +117,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param tokens Amount of tokens.
   /// @return Number of shares.
   function _tokenToShares(uint256 tokens) internal returns (uint256) {
-    uint256 shares = 0;
+    uint256 shares;
     uint256 _totalSupply = totalSupply();
 
     if (_totalSupply == 0) {
@@ -136,7 +136,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param shares Amount of shares.
   /// @return Number of tokens.
   function _sharesToToken(uint256 shares) internal returns (uint256) {
-    uint256 tokens = 0;
+    uint256 tokens;
     uint256 _totalSupply = totalSupply();
 
     if (_totalSupply == 0) {
