@@ -8,9 +8,7 @@ import { ethers, waffle } from 'hardhat';
 
 import SafeERC20WrapperUpgradeable from '../abis/SafeERC20WrapperUpgradeable.json';
 
-import {
-  SwappableYieldSourceHarness,
-} from '../types';
+import { SwappableYieldSourceHarness } from '../types';
 
 describe('SwappableYieldSource', () => {
   let contractsOwner: Signer;
@@ -142,11 +140,15 @@ describe('SwappableYieldSource', () => {
     it('should fail to return shares if yield source total supply increases too much', async () => {
       await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
       await swappableYieldSource.mint(wallet2.address, toWei('100'));
-      await yieldSource.mock.balanceOfToken.withArgs(swappableYieldSource.address).returns(toWei('100'));
+      await yieldSource.mock.balanceOfToken
+        .withArgs(swappableYieldSource.address)
+        .returns(toWei('100'));
 
       expect(await swappableYieldSource.callStatic.tokenToShares(toWei('1'))).to.equal(toWei('2'));
 
-      await yieldSource.mock.balanceOfToken.withArgs(swappableYieldSource.address).returns(parseUnits('100', 37));
+      await yieldSource.mock.balanceOfToken
+        .withArgs(swappableYieldSource.address)
+        .returns(parseUnits('100', 37));
 
       expect(await swappableYieldSource.callStatic.tokenToShares(toWei('1'))).to.equal(0);
     });
@@ -417,9 +419,7 @@ describe('SwappableYieldSource', () => {
         .withArgs(swappableYieldSource.address)
         .returns(yieldSourceBalance);
 
-      await yieldSource.mock.redeemToken
-        .withArgs(yieldSourceBalance)
-        .returns(yieldSourceBalance);
+      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
 
       await underlyingToken.mock.allowance
         .withArgs(swappableYieldSource.address, replacementYieldSource.address)
@@ -435,11 +435,17 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should swapYieldSource if yieldSourceOwner', async () => {
-      expect(
-        await swappableYieldSource
-          .connect(yieldSourceOwner)
-          .swapYieldSource(replacementYieldSource.address),
-      ).to.emit(swappableYieldSource, 'YieldSourceSwapped');
+      const transaction = await swappableYieldSource
+        .connect(yieldSourceOwner)
+        .swapYieldSource(replacementYieldSource.address);
+
+      expect(transaction)
+        .to.emit(swappableYieldSource, 'SwappableYieldSourceSet')
+        .withArgs(replacementYieldSource.address);
+
+      expect(transaction)
+        .to.emit(swappableYieldSource, 'FundsTransferred')
+        .withArgs(yieldSource.address, yieldSourceBalance);
 
       expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
     });
@@ -450,9 +456,7 @@ describe('SwappableYieldSource', () => {
       ).to.emit(swappableYieldSource, 'AssetManagerTransferred');
 
       expect(
-        await swappableYieldSource
-          .connect(wallet2)
-          .swapYieldSource(replacementYieldSource.address),
+        await swappableYieldSource.connect(wallet2).swapYieldSource(replacementYieldSource.address),
       ).to.emit(swappableYieldSource, 'YieldSourceSwapped');
 
       expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);

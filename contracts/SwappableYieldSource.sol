@@ -40,12 +40,6 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     uint256 amount
   );
 
-  /// @notice Emitted when yield source has been successfuly swapped.
-  event YieldSourceSwapped(
-    address indexed previousYieldSource,
-    address indexed yieldSource
-  );
-
   /// @notice Emitted when ERC20 tokens other than yield source's tokens are withdrawn from the swappable yield source.
   event TransferredERC20(
     address indexed from,
@@ -273,7 +267,6 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     _setYieldSource(_newYieldSource);
     _transferFunds(_currentYieldSource, balance);
 
-    emit YieldSourceSwapped(address(_currentYieldSource), address(yieldSource));
     return true;
   }
 
