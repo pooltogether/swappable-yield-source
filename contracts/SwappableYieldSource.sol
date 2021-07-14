@@ -21,6 +21,11 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   using SafeERC20Upgradeable for IERC20Upgradeable;
 
   /// @notice Emitted when the swappable yield source is initialized.
+  /// @param yieldSource Address of yield source used to initialize this swappable yield source.
+  /// @param decimals Number of decimals the shares (inherited ERC20) will have.  Same as underlying asset to ensure same ExchangeRates.
+  /// @param symbol Token symbol for the underlying ERC20 shares (eg: sysDAI).
+  /// @param name Token name for the underlying ERC20 shares (eg: PoolTogether Swappable Yield Source DAI).
+  /// @param owner Swappable yield source owner.
   event SwappableYieldSourceInitialized(
     IYieldSource indexed yieldSource,
     uint8 decimals,
@@ -30,17 +35,24 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   );
 
   /// @notice Emitted when a yield source has been successfuly set.
+  /// @param yieldSource Yield source address that was set.
   event SwappableYieldSourceSet(
-    address indexed yieldSource
+    IYieldSource indexed yieldSource
   );
 
-  /// @notice Emitted when funds are successfully transferred from specified yield source.
+  /// @notice Emitted when funds are successfully transferred from specified yield source to current yield source.
+  /// @param yieldSource Yield source address that provided funds.
+  /// @param amount Amount of funds transferred.
   event FundsTransferred(
-    address indexed yieldSource,
+    IYieldSource indexed yieldSource,
     uint256 amount
   );
 
   /// @notice Emitted when ERC20 tokens other than yield source's tokens are withdrawn from the swappable yield source.
+  /// @param from Address that transferred funds.
+  /// @param to Address that received funds.
+  /// @param amount Amount of tokens transferred.
+  /// @param token ERC20 token transferred.
   event TransferredERC20(
     address indexed from,
     address indexed to,
@@ -216,7 +228,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
     yieldSource = _newYieldSource;
 
-    emit SwappableYieldSourceSet(address(yieldSource));
+    emit SwappableYieldSourceSet(_newYieldSource);
   }
 
   /// @notice Set new yield source.
@@ -232,17 +244,17 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @dev We check that the `balanceDiff` transferred is at least equal or superior to the `amount` requested.
   /// @dev `balanceDiff` can be superior to `amount` if yield has been accruing between redeeming and checking for a mathematical error.
   /// @param _yieldSource Yield source address to transfer funds from.
-  /// @param amount Amount of funds to transfer from passed yield source to current yield source.
-  function _transferFunds(IYieldSource _yieldSource, uint256 amount) internal {
-    _yieldSource.redeemToken(amount);
+  /// @param _amount Amount of funds to transfer from passed yield source to current yield source.
+  function _transferFunds(IYieldSource _yieldSource, uint256 _amount) internal {
+    _yieldSource.redeemToken(_amount);
     uint256 balanceDiff = IERC20Upgradeable(_yieldSource.depositToken()).balanceOf(address(this));
 
-    require(amount <= balanceDiff, "SwappableYieldSource/transfer-amount-different");
+    require(_amount <= balanceDiff, "SwappableYieldSource/transfer-amount-different");
 
     IERC20Upgradeable(_yieldSource.depositToken()).safeApprove(address(yieldSource), balanceDiff);
     yieldSource.supplyTokenTo(balanceDiff, address(this));
 
-    emit FundsTransferred(address(_yieldSource), amount);
+    emit FundsTransferred(_yieldSource, _amount);
   }
 
   /// @notice Transfer funds from specified yield source to current yield source.
