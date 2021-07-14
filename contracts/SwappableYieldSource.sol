@@ -72,7 +72,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Initializes the swappable yield source with the yieldSource address provided.
   /// @param _yieldSource Address of yield source used to initialize this swappable yield source.
   /// @param _decimals Number of decimals the shares (inherited ERC20) will have.  Same as underlying asset to ensure same ExchangeRates.
-  /// @param _symbol Token symbol for the underlying ERC20 shares (eg: swsDAI).
+  /// @param _symbol Token symbol for the underlying ERC20 shares (eg: sysDAI).
   /// @param _name Token name for the underlying ERC20 shares (eg: PoolTogether Swappable Yield Source DAI).
   /// @param _owner Swappable yield source owner.
   /// @return true if operation is successful.
@@ -89,6 +89,8 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
     __Ownable_init();
     transferOwnership(_owner);
+
+    __ReentrancyGuard_init();
 
     __ERC20_init(_name, _symbol);
     require(_decimals > 0, "SwappableYieldSource/decimals-gt-zero");
