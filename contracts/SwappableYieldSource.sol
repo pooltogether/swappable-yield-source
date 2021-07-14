@@ -250,7 +250,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param _yieldSource Yield source address to transfer funds from.
   /// @param amount Amount of funds to transfer from passed yield source to current yield source.
   /// @return true if operation is successful.
-  function transferFunds(IYieldSource _yieldSource, uint256 amount) external returns (bool) {
+  function transferFunds(IYieldSource _yieldSource, uint256 amount) external onlyOwnerOrAssetManager returns (bool) {
     _requireDifferentYieldSource(_yieldSource);
     _transferFunds(_yieldSource, amount);
     return true;

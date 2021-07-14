@@ -390,6 +390,36 @@ describe('SwappableYieldSource', () => {
       ).to.emit(swappableYieldSource, 'FundsTransferred');
     });
 
+    it('should transferFunds if assetManager', async () => {
+      await replacementYieldSource.mock.redeemToken
+        .withArgs(replacementYieldSourceBalance)
+        .returns(replacementYieldSourceBalance);
+
+      await underlyingToken.mock.balanceOf
+        .withArgs(swappableYieldSource.address)
+        .returns(replacementYieldSourceBalance);
+
+      await underlyingToken.mock.allowance
+        .withArgs(swappableYieldSource.address, yieldSource.address)
+        .returns(toWei('0'));
+
+      await underlyingToken.mock.approve
+        .withArgs(yieldSource.address, replacementYieldSourceBalance)
+        .returns(true);
+
+      await yieldSource.mock.supplyTokenTo
+        .withArgs(replacementYieldSourceBalance, swappableYieldSource.address)
+        .returns();
+
+      swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address)
+
+      expect(
+        await swappableYieldSource
+          .connect(wallet2)
+          .transferFunds(replacementYieldSource.address, replacementYieldSourceBalance),
+      ).to.emit(swappableYieldSource, 'FundsTransferred');
+    });
+
     it('should fail to transferFunds if balanceDiff different from amount', async () => {
       const differentAmount = toWei('200');
 
@@ -414,6 +444,14 @@ describe('SwappableYieldSource', () => {
           .connect(yieldSourceOwner)
           .transferFunds(yieldSource.address, yieldSourceBalance),
       ).to.be.revertedWith('SwappableYieldSource/same-yield-source');
+    });
+
+    it('should fail to transferFunds if not owner or asset manager', async () => {
+      await expect(
+        swappableYieldSource
+          .connect(wallet2)
+          .transferFunds(yieldSource.address, yieldSourceBalance),
+      ).to.be.revertedWith('onlyOwnerOrAssetManager: caller is not owner or asset manager');
     });
   });
 
