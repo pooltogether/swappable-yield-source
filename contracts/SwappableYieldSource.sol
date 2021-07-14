@@ -234,7 +234,8 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param _yieldSource Yield source address to transfer funds from.
   /// @param amount Amount of funds to transfer from passed yield source to current yield source.
   function _transferFunds(IYieldSource _yieldSource, uint256 amount) internal {
-    uint256 balanceDiff = _yieldSource.redeemToken(amount);
+    _yieldSource.redeemToken(amount);
+    uint256 balanceDiff = IERC20Upgradeable(_yieldSource.depositToken()).balanceOf(address(this));
 
     require(amount <= balanceDiff, "SwappableYieldSource/transfer-amount-different");
 

@@ -367,6 +367,10 @@ describe('SwappableYieldSource', () => {
         .withArgs(replacementYieldSourceBalance)
         .returns(replacementYieldSourceBalance);
 
+      await underlyingToken.mock.balanceOf
+        .withArgs(swappableYieldSource.address)
+        .returns(replacementYieldSourceBalance);
+
       await underlyingToken.mock.allowance
         .withArgs(swappableYieldSource.address, yieldSource.address)
         .returns(toWei('0'));
@@ -387,9 +391,15 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should fail to transferFunds if balanceDiff different from amount', async () => {
+      const differentAmount = toWei('200');
+
       await replacementYieldSource.mock.redeemToken
         .withArgs(replacementYieldSourceBalance)
-        .returns(toWei('200'));
+        .returns(differentAmount);
+
+      await underlyingToken.mock.balanceOf
+        .withArgs(swappableYieldSource.address)
+        .returns(differentAmount);
 
       await expect(
         swappableYieldSource
@@ -420,6 +430,10 @@ describe('SwappableYieldSource', () => {
         .returns(yieldSourceBalance);
 
       await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
+
+      await underlyingToken.mock.balanceOf
+        .withArgs(swappableYieldSource.address)
+        .returns(yieldSourceBalance);
 
       await underlyingToken.mock.allowance
         .withArgs(swappableYieldSource.address, replacementYieldSource.address)
@@ -455,9 +469,17 @@ describe('SwappableYieldSource', () => {
         swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address),
       ).to.emit(swappableYieldSource, 'AssetManagerTransferred');
 
-      expect(
-        await swappableYieldSource.connect(wallet2).swapYieldSource(replacementYieldSource.address),
-      ).to.emit(swappableYieldSource, 'YieldSourceSwapped');
+      const transaction = await swappableYieldSource
+        .connect(wallet2)
+        .swapYieldSource(replacementYieldSource.address);
+
+      expect(transaction)
+        .to.emit(swappableYieldSource, 'SwappableYieldSourceSet')
+        .withArgs(replacementYieldSource.address);
+
+      expect(transaction)
+        .to.emit(swappableYieldSource, 'FundsTransferred')
+        .withArgs(yieldSource.address, yieldSourceBalance);
 
       expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
     });
