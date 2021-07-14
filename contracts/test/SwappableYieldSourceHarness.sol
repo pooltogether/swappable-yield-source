@@ -10,7 +10,7 @@ contract SwappableYieldSourceHarness is SwappableYieldSource {
     return _requireYieldSource(_yieldSource);
   }
 
-  function requireDifferentYieldSource(address _yieldSource) public view {
+  function requireDifferentYieldSource(IYieldSource _yieldSource) public view {
     return _requireDifferentYieldSource(_yieldSource);
   }
 
