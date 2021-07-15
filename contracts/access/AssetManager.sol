@@ -21,16 +21,16 @@ abstract contract AssetManager is ContextUpgradeable, OwnableUpgradeable {
     address private _assetManager;
 
     /**
-     * @dev Emitted when the _assetManager has been changed
-     * @param previousAssetManager address of the former _assetManager
-     * @param newAssetManager address of the new _assetManager
+     * @dev Emitted when _assetManager has been changed.
+     * @param previousAssetManager former _assetManager address.
+     * @param newAssetManager new _assetManager address.
      */
     event AssetManagerTransferred(address indexed previousAssetManager, address indexed newAssetManager);
 
     /**
-     * @notice Gets the current _assetManager
-     * @dev Returns the address of the current asset manager.
-     * @return The address of the current _assetManager
+     * @notice Gets current _assetManager.
+     * @dev Returns current _assetManager address.
+     * @return Current _assetManager address.
      */
     function assetManager() public view virtual returns (address) {
         return _assetManager;
@@ -45,14 +45,18 @@ abstract contract AssetManager is ContextUpgradeable, OwnableUpgradeable {
     }
 
     /**
-     * @notice Set the initial asset manager
+     * @notice Set or change of asset manager.
      * @dev Throws if called by any account other than the owner.
-     * @param newAssetManager The address of the desired new _assetManager
-     * @return Boolean to indicate if the operation was successful or not
+     * @param _newAssetManager New _assetManager address.
+     * @return Boolean to indicate if the operation was successful or not.
      */
-    function setAssetManager(address newAssetManager) public virtual onlyOwner returns (bool) {
-        _assetManager = newAssetManager;
-        emit AssetManagerTransferred(address(0), newAssetManager);
+    function setAssetManager(address _newAssetManager) public virtual onlyOwner returns (bool) {
+        require(_newAssetManager != address(0), "onlyOwnerOrAssetManager/assetManager-not-zero-address");
+
+        address _previousAssetManager = _assetManager;
+        _assetManager = _newAssetManager;
+
+        emit AssetManagerTransferred(_previousAssetManager, _newAssetManager);
         return true;
     }
 }

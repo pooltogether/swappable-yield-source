@@ -69,6 +69,22 @@ describe('SwappableYieldSource', () => {
     });
   });
 
+  describe('assetManager()', () => {
+    it('should setAssetManager', async () => {
+      await expect(
+        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address),
+      ).to.emit(swappableYieldSource, 'AssetManagerTransferred').withArgs(ethers.constants.AddressZero, wallet2.address);
+
+      expect(await swappableYieldSource.assetManager()).to.equal(wallet2.address);
+    });
+
+    it('should fail to setAssetManager', async () => {
+      await expect(
+        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(ethers.constants.AddressZero),
+      ).to.be.revertedWith('onlyOwnerOrAssetManager/assetManager-not-zero-address');
+    });
+  });
+
   describe('depositToken()', () => {
     it('should return the underlying token', async () => {
       expect(await swappableYieldSource.depositToken()).to.equal(underlyingToken.address);
@@ -314,7 +330,7 @@ describe('SwappableYieldSource', () => {
     it('should setYieldSource if assetManager', async () => {
       await expect(
         swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address),
-      ).to.emit(swappableYieldSource, 'AssetManagerTransferred');
+      ).to.emit(swappableYieldSource, 'AssetManagerTransferred').withArgs(ethers.constants.AddressZero, wallet2.address);
 
       expect(
         await swappableYieldSource.connect(wallet2).setYieldSource(replacementYieldSource.address),
@@ -326,7 +342,7 @@ describe('SwappableYieldSource', () => {
     it('should fail to setYieldSource if not yieldSourceOwner or assetManager', async () => {
       await expect(
         swappableYieldSource.connect(wallet2).setYieldSource(replacementYieldSource.address),
-      ).to.be.revertedWith('OwnerOrAssetManager: caller is not owner or asset manager');
+      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
     });
 
     it('should fail to setYieldSource if same yield source', async () => {
@@ -444,7 +460,7 @@ describe('SwappableYieldSource', () => {
         swappableYieldSource
           .connect(wallet2)
           .transferFunds(yieldSource.address, yieldSourceBalance),
-      ).to.be.revertedWith('onlyOwnerOrAssetManager: caller is not owner or asset manager');
+      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
     });
   });
 
@@ -518,7 +534,7 @@ describe('SwappableYieldSource', () => {
     it('should fail to swapYieldSource if not yieldSourceOwner or assetManager', async () => {
       await expect(
         swappableYieldSource.connect(wallet2).swapYieldSource(yieldSource.address),
-      ).to.be.revertedWith('OwnerOrAssetManager: caller is not owner or asset manager');
+      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
     });
   });
 
@@ -566,7 +582,7 @@ describe('SwappableYieldSource', () => {
         swappableYieldSource
           .connect(wallet2)
           .transferERC20(erc20Token.address, yieldSourceOwner.address, toWei('10')),
-      ).to.be.revertedWith('OwnerOrAssetManager: caller is not owner or asset manager');
+      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
     });
   });
 });
