@@ -71,8 +71,19 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Hack to determine if address passed is an actual yield source.
   /// @param _yieldSource Yield source address to check.
   function _requireYieldSource(IYieldSource _yieldSource) internal view {
-    (bool succeeded,) = address(_yieldSource).staticcall(abi.encode(_yieldSource.depositToken.selector));
-    require(succeeded, "SwappableYieldSource/invalid-yield-source");
+    require(address(_yieldSource) != address(0), "SwappableYieldSource/yieldSource-not-zero-address");
+
+    (, bytes memory depositTokenAddressData) = address(_yieldSource).staticcall(abi.encode(_yieldSource.depositToken.selector));
+
+    bool isInvalidYieldSource;
+
+    if (depositTokenAddressData.length > 0) {
+      (address depositTokenAddress) = abi.decode(depositTokenAddressData, (address));
+
+      isInvalidYieldSource = depositTokenAddress != address(0);
+    }
+
+    require(isInvalidYieldSource, "SwappableYieldSource/invalid-yield-source");
   }
 
   /// @notice Initializes the swappable yield source with the yieldSource address provided.
@@ -89,11 +100,12 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     string calldata _name,
     address _owner
   ) public initializer returns (bool) {
+    _requireYieldSource(_yieldSource);
     yieldSource = _yieldSource;
 
-    _requireYieldSource(_yieldSource);
-
     __Ownable_init();
+
+    require(_owner != address(0), "SwappableYieldSource/owner-not-zero-address");
     transferOwnership(_owner);
 
     __ReentrancyGuard_init();

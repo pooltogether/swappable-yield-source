@@ -23,6 +23,22 @@ describe('SwappableYieldSource', () => {
   let underlyingToken: MockContract;
   let differentUnderlyingToken: MockContract;
 
+  let isInitializeTest = false;
+
+  const initializeSwappableYieldSource = async (
+    yieldSourceAddress: string,
+    decimals: number,
+    ownerAddress: string,
+  ) => {
+    await swappableYieldSource.initialize(
+      yieldSourceAddress,
+      decimals,
+      'swsDAI',
+      'PoolTogether Swappable Yield Source DAI',
+      ownerAddress,
+    );
+  };
+
   const { getContractAt, getContractFactory, getSigners, utils } = ethers;
   const { deployMockContract } = waffle;
   const { parseEther: toWei, parseUnits } = utils;
@@ -53,13 +69,77 @@ describe('SwappableYieldSource', () => {
       contractsOwner,
     )) as SwappableYieldSourceHarness;
 
-    await swappableYieldSource.initialize(
-      yieldSource.address,
-      18,
-      'swsDAI',
-      'PoolTogether Swappable Yield Source DAI',
-      yieldSourceOwner.address,
-    );
+    if (!isInitializeTest) {
+      await initializeSwappableYieldSource(
+        yieldSource.address,
+        18,
+        yieldSourceOwner.address,
+      );
+    }
+  });
+
+    describe('initialize()', () => {
+    before(() => {
+      isInitializeTest = true;
+    });
+
+    after(() => {
+      isInitializeTest = false;
+    });
+
+    it('should fail if yieldSource is address zero', async () => {
+      await expect(
+        initializeSwappableYieldSource(
+          ethers.constants.AddressZero,
+          18,
+          yieldSourceOwner.address,
+        ),
+      ).to.be.revertedWith('SwappableYieldSource/yieldSource-not-zero-address');
+    });
+
+    it('should fail if yieldSource address is not a yield source', async () => {
+      const randomWallet = ethers.Wallet.createRandom();
+
+      await expect(
+        initializeSwappableYieldSource(
+          randomWallet.address,
+          18,
+          yieldSourceOwner.address,
+        ),
+      ).to.be.revertedWith('SwappableYieldSource/invalid-yield-source');
+    });
+
+    it('should fail if yieldSource depositToken is address zero', async () => {
+      await yieldSource.mock.depositToken.returns(ethers.constants.AddressZero);
+
+      await expect(
+        initializeSwappableYieldSource(
+          yieldSource.address,
+          18,
+          yieldSourceOwner.address,
+        ),
+      ).to.be.revertedWith('SwappableYieldSource/invalid-yield-source');
+    });
+
+    it('should fail if owner is address zero', async () => {
+      await expect(
+        initializeSwappableYieldSource(
+          yieldSource.address,
+          18,
+          ethers.constants.AddressZero,
+        ),
+      ).to.be.revertedWith('SwappableYieldSource/owner-not-zero-address');
+    });
+
+    it('should fail if token decimal is not greater than 0', async () => {
+      await expect(
+      initializeSwappableYieldSource(
+        yieldSource.address,
+        0,
+        yieldSourceOwner.address,
+      ),
+      ).to.be.revertedWith('SwappableYieldSource/decimals-gt-zero');
+    });
   });
 
   describe('create()', () => {
