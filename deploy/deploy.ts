@@ -1,4 +1,4 @@
-import { Contract, ContractFactory } from 'ethers';
+import { Contract } from 'ethers';
 import { getChainByChainId } from 'evm-chains';
 import { writeFileSync } from 'fs';
 import { HardhatRuntimeEnvironment } from 'hardhat/types';
@@ -35,6 +35,8 @@ const deployFunction: DeployFunction = async function (hre: HardhatRuntimeEnviro
   let { deployer, multisig } = await getNamedAccounts();
 
   const chainId = parseInt(await getChainId());
+
+  // 31337 is unit testing, 1337 is for coverage
   const isNotTestChainId = chainId !== 31337 && chainId !== 1337;
   const networkName = isNotTestChainId ? getChainByChainId(chainId)?.network : 'Test';
   const isTestEnvironment = isTestEnvironmentHelper(network);
@@ -90,62 +92,62 @@ const deployFunction: DeployFunction = async function (hre: HardhatRuntimeEnviro
     let { genericProxyFactory } = await getNamedAccounts();
     proxyFactoryContract = await getContractAt('GenericProxyFactory', genericProxyFactory);
     success(`GenericProxyFactory deployed at ${proxyFactoryContract.address}`);
+
+    action(`Deploying AaveDAISwappableYieldSource...`);
+    const swappableYieldSourceArtifact = await artifacts.readArtifact('SwappableYieldSource');
+    const swappableYieldSourceABI = swappableYieldSourceArtifact.abi;
+
+    const swappableYieldSourceInterface = new ethers.utils.Interface(swappableYieldSourceABI);
+
+    const constructorArgs = swappableYieldSourceInterface.encodeFunctionData(
+      swappableYieldSourceInterface.getFunction('initialize'),
+      [
+        AAVE_DAI_YIELD_SOURCE_KOVAN,
+        18,
+        'sysDAI',
+        'PoolTogether Swappable Yield Source DAI',
+        multisig,
+      ],
+    );
+
+    const aaveDAISwappableYieldSourceResult = await proxyFactoryContract.create(
+      swappableYieldSourceContract.address,
+      constructorArgs,
+    );
+
+    const aaveDAISwappableYieldSourceReceipt = await provider.getTransactionReceipt(
+      aaveDAISwappableYieldSourceResult.hash,
+    );
+
+    const aaveDAISwappableYieldSourceEvent = proxyFactoryContract.interface.parseLog(
+      aaveDAISwappableYieldSourceReceipt.logs[0],
+    );
+
+    const aaveDAISwappableYieldSourceAddress = aaveDAISwappableYieldSourceEvent.args.created;
+
+    success(`AaveDAISwappableYieldSource deployed at ${aaveDAISwappableYieldSourceAddress}`);
+
+    action('Saving deployments file for Aave DAI');
+
+    const deploymentSubmission: DeploymentSubmission = {
+      address: aaveDAISwappableYieldSourceAddress,
+      abi: swappableYieldSourceABI,
+      receipt: aaveDAISwappableYieldSourceReceipt,
+      transactionHash: aaveDAISwappableYieldSourceReceipt.transactionHash,
+      args: [constructorArgs],
+      bytecode: `${await provider.getCode(aaveDAISwappableYieldSourceAddress)}`,
+    };
+
+    const outputFile = `${outputDirectory}/AaveDAISwappableYieldSource.json`;
+
+    action(`Writing to ${outputFile}...`);
+    writeFileSync(outputFile, JSON.stringify(deploymentSubmission, null, 2), {
+      encoding: 'utf8',
+      flag: 'w',
+    });
+
+    await deployments.save('AaveDAISwappableYieldSource', deploymentSubmission);
   }
-
-  action(`Deploying AaveDAISwappableYieldSource...`);
-  const swappableYieldSourceArtifact = await artifacts.readArtifact('SwappableYieldSource');
-  const swappableYieldSourceABI = swappableYieldSourceArtifact.abi;
-
-  const swappableYieldSourceInterface = new ethers.utils.Interface(swappableYieldSourceABI);
-
-  const constructorArgs = swappableYieldSourceInterface.encodeFunctionData(
-    swappableYieldSourceInterface.getFunction('initialize'),
-    [
-      AAVE_DAI_YIELD_SOURCE_KOVAN,
-      18,
-      'swsDAI',
-      'PoolTogether Swappable Yield Source DAI',
-      multisig,
-    ],
-  );
-
-  const aaveDAISwappableYieldSourceResult = await proxyFactoryContract.create(
-    swappableYieldSourceContract.address,
-    constructorArgs,
-  );
-
-  const aaveDAISwappableYieldSourceReceipt = await provider.getTransactionReceipt(
-    aaveDAISwappableYieldSourceResult.hash,
-  );
-
-  const aaveDAISwappableYieldSourceEvent = proxyFactoryContract.interface.parseLog(
-    aaveDAISwappableYieldSourceReceipt.logs[0],
-  );
-
-  const aaveDAISwappableYieldSourceAddress = aaveDAISwappableYieldSourceEvent.args.created;
-
-  success(`AaveDAISwappableYieldSource deployed at ${aaveDAISwappableYieldSourceAddress}`);
-
-  action(`Saving deployments file for Aave DAI`);
-
-  const deploymentSubmission: DeploymentSubmission = {
-    address: aaveDAISwappableYieldSourceAddress,
-    abi: swappableYieldSourceABI,
-    receipt: aaveDAISwappableYieldSourceReceipt,
-    transactionHash: aaveDAISwappableYieldSourceReceipt.transactionHash,
-    args: [constructorArgs],
-    bytecode: `${await provider.getCode(aaveDAISwappableYieldSourceAddress)}`,
-  };
-
-  const outputFile = `${outputDirectory}/AaveDAISwappableYieldSource.json`;
-
-  action(`Writing to ${outputFile}...`);
-  writeFileSync(outputFile, JSON.stringify(deploymentSubmission, null, 2), {
-    encoding: 'utf8',
-    flag: 'w',
-  });
-
-  await deployments.save('AaveDAISwappableYieldSource', deploymentSubmission);
 };
 
 export default deployFunction;

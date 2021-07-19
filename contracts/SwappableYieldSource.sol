@@ -69,6 +69,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   }
 
   /// @notice Hack to determine if address passed is an actual yield source.
+  /// @dev If depositTokenAddressData.length is not superior to 0, then staticcall didn't return any data.
   /// @param _yieldSource Yield source address to check.
   function _requireYieldSource(IYieldSource _yieldSource) internal view {
     require(address(_yieldSource) != address(0), "SwappableYieldSource/yieldSource-not-zero-address");
@@ -87,7 +88,8 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   }
 
   /// @notice Initializes the swappable yield source with the yieldSource address provided.
-  /// @param _yieldSource Address of yield source used to initialize this swappable yield source.
+  /// @dev We approve yieldSource to spend maxUint256 amount of depositToken (eg: DAI), to save gas for future calls.
+  /// @param _yieldSource Yield source address used to initialize this swappable yield source.
   /// @param _decimals Number of decimals the shares (inherited ERC20) will have.  Same as underlying asset to ensure same ExchangeRates.
   /// @param _symbol Token symbol for the underlying ERC20 shares (eg: sysDAI).
   /// @param _name Token name for the underlying ERC20 shares (eg: PoolTogether Swappable Yield Source DAI).
@@ -114,6 +116,8 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     require(_decimals > 0, "SwappableYieldSource/decimals-gt-zero");
     _setupDecimals(_decimals);
 
+    IERC20Upgradeable(_yieldSource.depositToken()).safeApprove(address(_yieldSource), type(uint256).max);
+
     emit SwappableYieldSourceInitialized(
       _yieldSource,
       _decimals,
@@ -121,6 +125,19 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
       _name,
       _owner
     );
+
+    return true;
+  }
+
+  /// @notice Approve yieldSource to spend maxUint256 amount of depositToken (eg: DAI).
+  /// @dev Emergency function to re-approve max amount if approval amount dropped too low.
+  /// @return true if operation is successful.
+  function approveMaxAmount() external onlyOwner returns (bool) {
+    IYieldSource _yieldSource = yieldSource;
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(_yieldSource.depositToken());
+
+    uint256 allowance = _depositToken.allowance(address(this), address(_yieldSource));
+    _depositToken.safeIncreaseAllowance(address(_yieldSource), type(uint256).max.sub(allowance));
 
     return true;
   }
@@ -192,7 +209,6 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
 
     _depositToken.safeTransferFrom(msg.sender, address(this), amount);
-    _depositToken.safeApprove(address(yieldSource), amount);
     yieldSource.supplyTokenTo(amount, address(this));
 
     _mintShares(amount, to);
@@ -233,12 +249,14 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   }
 
   /// @notice Set new yield source.
+  /// @dev After setting the new yield source, we need to approve it to spend maxUint256 amount of depositToken (eg: DAI).
   /// @param _newYieldSource New yield source address to set.
   function _setYieldSource(IYieldSource _newYieldSource) internal {
     _requireDifferentYieldSource(_newYieldSource);
     require(_newYieldSource.depositToken() == yieldSource.depositToken(), "SwappableYieldSource/different-deposit-token");
 
     yieldSource = _newYieldSource;
+    IERC20Upgradeable(_newYieldSource.depositToken()).safeApprove(address(_newYieldSource), type(uint256).max);
 
     emit SwappableYieldSourceSet(_newYieldSource);
   }
@@ -253,18 +271,19 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   }
 
   /// @notice Transfer funds from specified yield source to current yield source.
-  /// @dev We check that the `balanceDiff` transferred is at least equal or superior to the `amount` requested.
-  /// @dev `balanceDiff` can be superior to `amount` if yield has been accruing between redeeming and checking for a mathematical error.
+  /// @dev We check that the `currentBalance` transferred is at least equal or superior to the `amount` requested.
+  /// @dev `currentBalance` can be superior to `amount` if yield has been accruing between redeeming and checking for a mathematical error.
   /// @param _yieldSource Yield source address to transfer funds from.
   /// @param _amount Amount of funds to transfer from passed yield source to current yield source.
   function _transferFunds(IYieldSource _yieldSource, uint256 _amount) internal {
+    IYieldSource _currentYieldSource = yieldSource;
+
     _yieldSource.redeemToken(_amount);
-    uint256 balanceDiff = IERC20Upgradeable(_yieldSource.depositToken()).balanceOf(address(this));
+    uint256 currentBalance = IERC20Upgradeable(_yieldSource.depositToken()).balanceOf(address(this));
 
-    require(_amount <= balanceDiff, "SwappableYieldSource/transfer-amount-different");
+    require(_amount <= currentBalance, "SwappableYieldSource/transfer-amount-different");
 
-    IERC20Upgradeable(_yieldSource.depositToken()).safeApprove(address(yieldSource), balanceDiff);
-    yieldSource.supplyTokenTo(balanceDiff, address(this));
+    _currentYieldSource.supplyTokenTo(currentBalance, address(this));
 
     emit FundsTransferred(_yieldSource, _amount);
   }

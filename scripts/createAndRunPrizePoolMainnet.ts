@@ -39,6 +39,100 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
 
     const increaseTime = (time: number) => increaseTimeHelper(hre, time);
 
+    const depositAndAwardPool = async () => {
+      action(
+        `Depositing ${formatUnits(depositAmount, daiDecimals)} ${dai.symbol} for ${
+          contractsOwner._address
+        }, ticket ${ticketAddress}...`,
+      );
+
+      await prizePool.depositTo(contractsOwner._address, depositAmount, ticketAddress, AddressZero);
+
+      success('Deposit Successful!');
+
+      info(`Prize strategy owner: ${await prizeStrategy.owner()}`);
+
+      action('Starting award...');
+      await increaseTime(60);
+      await prizeStrategy.startAward();
+      await increaseTime(60);
+
+      action('Completing award...');
+      const awardTx = await prizeStrategy.completeAward();
+      const awardReceipt = await getTransactionReceipt(awardTx.hash);
+
+      const awardLogs = awardReceipt.logs.map((log: any) => {
+        try {
+          return prizePool.interface.parseLog(log);
+        } catch (e) {
+          return null;
+        }
+      });
+
+      awardReceipt.logs.map((log: any) => {
+        try {
+          return prizeStrategy.interface.parseLog(log);
+        } catch (e) {
+          return null;
+        }
+      });
+
+      const awardedEvent = awardLogs.find((event: any) => event && event.name === 'Awarded');
+
+      if (awardedEvent) {
+        success(`Awarded ${formatUnits(awardedEvent?.args.amount, daiDecimals)} ${dai.symbol}!`);
+      }
+    };
+
+    const withdrawFromPool = async () => {
+      action('Withdrawing from PrizePool...');
+      const withdrawalAmount = depositAmount.div(2);
+      const earlyExitFee = await prizePool.callStatic.calculateEarlyExitFee(
+        contractsOwner._address,
+        ticketAddress,
+        withdrawalAmount,
+      );
+
+      const withdrawTx = await prizePool.withdrawInstantlyFrom(
+        contractsOwner._address,
+        withdrawalAmount,
+        ticketAddress,
+        earlyExitFee.exitFee,
+      );
+
+      const withdrawReceipt = await getTransactionReceipt(withdrawTx.hash);
+      const withdrawLogs = withdrawReceipt.logs.map((log: any) => {
+        try {
+          return prizePool.interface.parseLog(log);
+        } catch (e) {
+          return null;
+        }
+      });
+
+      const withdrawn = withdrawLogs.find(
+        (event: any) => event && event.name === 'InstantWithdrawal',
+      );
+
+      success(`Withdrawn ${formatUnits(withdrawn?.args?.redeemed)} ${dai.symbol}!`);
+      info(`Exit fee was ${withdrawn?.args?.exitFee} ${dai.symbol}`);
+
+      const userTicketBalanceAfter = await ticket.callStatic.balanceOf(contractsOwner._address);
+      const userDAIBalanceAfter = await daiContract.callStatic.balanceOf(contractsOwner._address);
+
+      info(
+        `User tickets balance after withdrawing ${formatUnits(
+          userTicketBalanceAfter,
+        )} ${ticketSymbol}`,
+      );
+
+      info(`User DAI balance after withdrawing ${formatUnits(userDAIBalanceAfter)} ${dai.symbol}`);
+
+      await prizePool.captureAwardBalance();
+      const awardableBalance = formatUnits(await prizePool.callStatic.awardBalance());
+
+      info(`Current awardable balance is ${awardableBalance} ${dai.symbol}`);
+    };
+
     action(
       `Creating Yield Source Prize Pool on ${networkName} (${
         isTestEnvironment(network) ? 'local' : 'remote'
@@ -202,50 +296,9 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
     const daiDecimals = await daiContract.decimals();
     const depositAmount = parseUnits('100', daiDecimals);
 
-    await daiContract.approve(prizePool.address, depositAmount);
+    await daiContract.approve(prizePool.address, ethers.constants.MaxUint256);
 
-    action(
-      `Depositing ${formatUnits(depositAmount, daiDecimals)} ${dai.symbol} for ${
-        contractsOwner._address
-      }, ticket ${ticketAddress}...`,
-    );
-
-    await prizePool.depositTo(contractsOwner._address, depositAmount, ticketAddress, AddressZero);
-
-    success('Deposit Successful!');
-
-    info(`Prize strategy owner: ${await prizeStrategy.owner()}`);
-
-    action('Starting award...');
-    await increaseTime(60);
-    await prizeStrategy.startAward();
-    await increaseTime(60);
-
-    action('Completing award...');
-    const awardTx = await prizeStrategy.completeAward();
-    const awardReceipt = await getTransactionReceipt(awardTx.hash);
-
-    const awardLogs = awardReceipt.logs.map((log: any) => {
-      try {
-        return prizePool.interface.parseLog(log);
-      } catch (e) {
-        return null;
-      }
-    });
-
-    awardReceipt.logs.map((log: any) => {
-      try {
-        return prizeStrategy.interface.parseLog(log);
-      } catch (e) {
-        return null;
-      }
-    });
-
-    const awardedEvent = awardLogs.find((event: any) => event && event.name === 'Awarded');
-
-    if (awardedEvent) {
-      success(`Awarded ${formatUnits(awardedEvent?.args.amount, daiDecimals)} ${dai.symbol}!`);
-    }
+    await depositAndAwardPool();
 
     action('Deploying Compound DAI Yield Source...');
 
@@ -270,6 +323,7 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
         userTicketBalanceBefore,
       )} ${ticketSymbol}`,
     );
+
     info(`User DAI balance before withdrawing ${formatUnits(userDAIBalanceBefore)} ${dai.symbol}`);
 
     const swappableYieldSourceContract = await getContractAt(
@@ -281,6 +335,7 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
     info(
       `Yield Source address before swap ${await swappableYieldSourceContract.callStatic.yieldSource()}`,
     );
+
     info(
       `PrizePool balanceOfToken before swap ${formatUnits(
         await swappableYieldSourceContract.callStatic.balanceOfToken(prizePool.address),
@@ -292,6 +347,7 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
     info(
       `Yield Source address after swap ${await swappableYieldSourceContract.callStatic.yieldSource()}`,
     );
+
     info(
       `PrizePool balanceOfToken after swap ${formatUnits(
         await swappableYieldSourceContract.callStatic.balanceOfToken(prizePool.address),
@@ -300,48 +356,8 @@ export default task('fork:create-swappable-prize-pool', 'Create a Swappable Priz
 
     success('Swapped Aave DAI Yield Source for Compound DAI Yield Source!');
 
-    action('Withdrawing from PrizePool...');
-    const withdrawalAmount = depositAmount.div(2);
-    const earlyExitFee = await prizePool.callStatic.calculateEarlyExitFee(
-      contractsOwner._address,
-      ticketAddress,
-      withdrawalAmount,
-    );
-
-    const withdrawTx = await prizePool.withdrawInstantlyFrom(
-      contractsOwner._address,
-      withdrawalAmount,
-      ticketAddress,
-      earlyExitFee.exitFee,
-    );
-
-    const withdrawReceipt = await getTransactionReceipt(withdrawTx.hash);
-    const withdrawLogs = withdrawReceipt.logs.map((log: any) => {
-      try {
-        return prizePool.interface.parseLog(log);
-      } catch (e) {
-        return null;
-      }
-    });
-
-    const withdrawn = withdrawLogs.find(
-      (event: any) => event && event.name === 'InstantWithdrawal',
-    );
-    success(`Withdrawn ${formatUnits(withdrawn?.args?.redeemed)} ${dai.symbol}!`);
-    info(`Exit fee was ${withdrawn?.args?.exitFee} ${dai.symbol}`);
-
-    const userTicketBalanceAfter = await ticket.callStatic.balanceOf(contractsOwner._address);
-    const userDAIBalanceAfter = await daiContract.callStatic.balanceOf(contractsOwner._address);
-
-    info(
-      `User tickets balance after withdrawing ${formatUnits(
-        userTicketBalanceAfter,
-      )} ${ticketSymbol}`,
-    );
-    info(`User DAI balance after withdrawing ${formatUnits(userDAIBalanceAfter)} ${dai.symbol}`);
-
-    await prizePool.captureAwardBalance();
-    const awardableBalance = formatUnits(await prizePool.callStatic.awardBalance());
-    info(`Current awardable balance is ${awardableBalance} ${dai.symbol}`);
+    await withdrawFromPool();
+    await depositAndAwardPool();
+    await withdrawFromPool();
   },
 );

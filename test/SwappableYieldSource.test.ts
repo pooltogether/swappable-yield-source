@@ -69,16 +69,20 @@ describe('SwappableYieldSource', () => {
       contractsOwner,
     )) as SwappableYieldSourceHarness;
 
+    await underlyingToken.mock.allowance
+      .withArgs(swappableYieldSource.address, yieldSource.address)
+      .returns(ethers.constants.Zero);
+
+    await underlyingToken.mock.approve
+      .withArgs(yieldSource.address, ethers.constants.MaxUint256)
+      .returns(true);
+
     if (!isInitializeTest) {
-      await initializeSwappableYieldSource(
-        yieldSource.address,
-        18,
-        yieldSourceOwner.address,
-      );
+      await initializeSwappableYieldSource(yieldSource.address, 18, yieldSourceOwner.address);
     }
   });
 
-    describe('initialize()', () => {
+  describe('initialize()', () => {
     before(() => {
       isInitializeTest = true;
     });
@@ -89,11 +93,7 @@ describe('SwappableYieldSource', () => {
 
     it('should fail if yieldSource is address zero', async () => {
       await expect(
-        initializeSwappableYieldSource(
-          ethers.constants.AddressZero,
-          18,
-          yieldSourceOwner.address,
-        ),
+        initializeSwappableYieldSource(ethers.constants.AddressZero, 18, yieldSourceOwner.address),
       ).to.be.revertedWith('SwappableYieldSource/yieldSource-not-zero-address');
     });
 
@@ -101,11 +101,7 @@ describe('SwappableYieldSource', () => {
       const randomWallet = ethers.Wallet.createRandom();
 
       await expect(
-        initializeSwappableYieldSource(
-          randomWallet.address,
-          18,
-          yieldSourceOwner.address,
-        ),
+        initializeSwappableYieldSource(randomWallet.address, 18, yieldSourceOwner.address),
       ).to.be.revertedWith('SwappableYieldSource/invalid-yield-source');
     });
 
@@ -113,31 +109,19 @@ describe('SwappableYieldSource', () => {
       await yieldSource.mock.depositToken.returns(ethers.constants.AddressZero);
 
       await expect(
-        initializeSwappableYieldSource(
-          yieldSource.address,
-          18,
-          yieldSourceOwner.address,
-        ),
+        initializeSwappableYieldSource(yieldSource.address, 18, yieldSourceOwner.address),
       ).to.be.revertedWith('SwappableYieldSource/invalid-yield-source');
     });
 
     it('should fail if owner is address zero', async () => {
       await expect(
-        initializeSwappableYieldSource(
-          yieldSource.address,
-          18,
-          ethers.constants.AddressZero,
-        ),
+        initializeSwappableYieldSource(yieldSource.address, 18, ethers.constants.AddressZero),
       ).to.be.revertedWith('SwappableYieldSource/owner-not-zero-address');
     });
 
     it('should fail if token decimal is not greater than 0', async () => {
       await expect(
-      initializeSwappableYieldSource(
-        yieldSource.address,
-        0,
-        yieldSourceOwner.address,
-      ),
+        initializeSwappableYieldSource(yieldSource.address, 0, yieldSourceOwner.address),
       ).to.be.revertedWith('SwappableYieldSource/decimals-gt-zero');
     });
   });
@@ -151,17 +135,40 @@ describe('SwappableYieldSource', () => {
 
   describe('assetManager()', () => {
     it('should setAssetManager', async () => {
-      await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address),
-      ).to.emit(swappableYieldSource, 'AssetManagerTransferred').withArgs(ethers.constants.AddressZero, wallet2.address);
+      await expect(swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address))
+        .to.emit(swappableYieldSource, 'AssetManagerTransferred')
+        .withArgs(ethers.constants.AddressZero, wallet2.address);
 
       expect(await swappableYieldSource.assetManager()).to.equal(wallet2.address);
     });
 
     it('should fail to setAssetManager', async () => {
       await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(ethers.constants.AddressZero),
+        swappableYieldSource
+          .connect(yieldSourceOwner)
+          .setAssetManager(ethers.constants.AddressZero),
       ).to.be.revertedWith('onlyOwnerOrAssetManager/assetManager-not-zero-address');
+    });
+  });
+
+  describe('approveMaxAmount()', () => {
+    it('should approve yieldSource to spend max uint256 amount', async () => {
+      await underlyingToken.mock.allowance
+        .withArgs(swappableYieldSource.address, yieldSource.address)
+        .returns(ethers.constants.MaxUint256);
+
+      expect(
+        await swappableYieldSource.connect(yieldSourceOwner).callStatic.approveMaxAmount(),
+      ).to.equal(true);
+      expect(
+        await underlyingToken.allowance(swappableYieldSource.address, yieldSource.address),
+      ).to.equal(ethers.constants.MaxUint256);
+    });
+
+    it('should fail if not owner', async () => {
+      await expect(
+        swappableYieldSource.connect(wallet2).callStatic.approveMaxAmount(),
+      ).to.be.revertedWith('Ownable: caller is not the owner');
     });
   });
 
@@ -307,12 +314,6 @@ describe('SwappableYieldSource', () => {
       .withArgs(userAddress, swappableYieldSource.address, userAmount)
       .returns(true);
 
-    await underlyingToken.mock.allowance
-      .withArgs(swappableYieldSource.address, yieldSource.address)
-      .returns(toWei('0'));
-
-    await underlyingToken.mock.approve.withArgs(yieldSource.address, userAmount).returns(true);
-
     await yieldSource.mock.supplyTokenTo
       .withArgs(userAmount, swappableYieldSource.address)
       .returns();
@@ -397,6 +398,16 @@ describe('SwappableYieldSource', () => {
   });
 
   describe('setYieldSource()', () => {
+    beforeEach(async () => {
+      await underlyingToken.mock.allowance
+        .withArgs(swappableYieldSource.address, replacementYieldSource.address)
+        .returns(ethers.constants.Zero);
+
+      await underlyingToken.mock.approve
+        .withArgs(replacementYieldSource.address, ethers.constants.MaxUint256)
+        .returns(true);
+    });
+
     it('should setYieldSource if yieldSourceOwner', async () => {
       expect(
         await swappableYieldSource
@@ -408,9 +419,9 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should setYieldSource if assetManager', async () => {
-      await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address),
-      ).to.emit(swappableYieldSource, 'AssetManagerTransferred').withArgs(ethers.constants.AddressZero, wallet2.address);
+      await expect(swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address))
+        .to.emit(swappableYieldSource, 'AssetManagerTransferred')
+        .withArgs(ethers.constants.AddressZero, wallet2.address);
 
       expect(
         await swappableYieldSource.connect(wallet2).setYieldSource(replacementYieldSource.address),
@@ -500,7 +511,7 @@ describe('SwappableYieldSource', () => {
         .withArgs(replacementYieldSourceBalance, swappableYieldSource.address)
         .returns();
 
-      swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address)
+      swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address);
 
       expect(
         await swappableYieldSource
@@ -564,10 +575,10 @@ describe('SwappableYieldSource', () => {
 
       await underlyingToken.mock.allowance
         .withArgs(swappableYieldSource.address, replacementYieldSource.address)
-        .returns(toWei('0'));
+        .returns(ethers.constants.Zero);
 
       await underlyingToken.mock.approve
-        .withArgs(replacementYieldSource.address, yieldSourceBalance)
+        .withArgs(replacementYieldSource.address, ethers.constants.MaxUint256)
         .returns(true);
 
       await replacementYieldSource.mock.supplyTokenTo
