@@ -8,6 +8,9 @@
 
 # PoolTogether Swappable Yield Source
 
+[![Mainnet fork](https://github.com/pooltogether/swappable-yield-source/actions/workflows/fork.yml/badge.svg)](https://github.com/pooltogether/swappable-yield-source/actions/workflows/fork.yml)
+[![Coveralls](https://github.com/pooltogether/swappable-yield-source/actions/workflows/coveralls.yml/badge.svg)](https://github.com/pooltogether/swappable-yield-source/actions/workflows/coveralls.yml)
+[![Coverage Status](https://coveralls.io/repos/github/pooltogether/swappable-yield-source/badge.svg?branch=main)](https://coveralls.io/github/pooltogether/swappable-yield-source?branch=main)
 [![built-with openzeppelin](https://img.shields.io/badge/built%20with-OpenZeppelin-3677FF)](https://docs.openzeppelin.com/)
 
 Wraps any [PoolTogether Yield Source](https://docs.pooltogether.com/protocol/yield-sources) and adds the ability to swap between any PoolTogether Yield Source.
@@ -23,6 +26,7 @@ The Swappable Yield Source needs to be initialized with a PoolTogether Yield Sou
 Yield Source addresses are available in `Constants.ts`.
 
 To initialize the Swappable Yield Source with the Yield Source you want to use, you need to modify the following line in `deploy/deploy.ts`:
+https://github.com/pooltogether/swappable-yield-source/blob/71b6810f821ff8eadc2b11238524054c3f5b836f/deploy/deploy.ts#L104
 
 
 To deploy, run:
@@ -60,6 +64,12 @@ direnv allow
 
 We use the [Hardhat](https://hardhat.org) ecosystem to test and deploy our contracts.
 
+First, you will need to deploy contracts in local.
+
+Start the hardhat node by running: `yarn start-fork`
+
+Then to deploy contracts locally, run: `yarn deploy-fork`
+
 To run unit tests:
 
 ```
@@ -91,7 +101,13 @@ yarn start-fork
 In another window, start the scripts to deploy and create a Aave Yield Source Prize Pool, deposit Dai into it, swap to another Yield Source, award the prize and withdraw.
 
 ```
-yarn deploy-fork && yarn run-fork
+yarn run-fork
+```
+
+You can also run these commands concurrently with:
+
+```
+yarn mainnet-fork
 ```
 
 ### Deploy

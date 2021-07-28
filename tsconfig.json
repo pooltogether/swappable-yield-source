@@ -12,6 +12,7 @@
         "hardhat.config.ts",
         "hardhat.network.ts",
         "./deploy",
+        "./node_modules/@pooltogether/aave-yield-source/types/",
         "./scripts",
         "./test",
         "types/**/*",
