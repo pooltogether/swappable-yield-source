@@ -113,7 +113,6 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     __ReentrancyGuard_init();
 
     __ERC20_init(_name, _symbol);
-    require(_decimals > 0, "SwappableYieldSource/decimals-gt-zero");
     _setupDecimals(_decimals);
 
     IERC20Upgradeable(_yieldSource.depositToken()).safeApprove(address(_yieldSource), type(uint256).max);

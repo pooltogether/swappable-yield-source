@@ -118,12 +118,6 @@ describe('SwappableYieldSource', () => {
         initializeSwappableYieldSource(yieldSource.address, 18, ethers.constants.AddressZero),
       ).to.be.revertedWith('SwappableYieldSource/owner-not-zero-address');
     });
-
-    it('should fail if token decimal is not greater than 0', async () => {
-      await expect(
-        initializeSwappableYieldSource(yieldSource.address, 0, yieldSourceOwner.address),
-      ).to.be.revertedWith('SwappableYieldSource/decimals-gt-zero');
-    });
   });
 
   describe('create()', () => {
