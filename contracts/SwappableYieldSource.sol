@@ -76,15 +76,15 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
     (, bytes memory depositTokenAddressData) = address(_yieldSource).staticcall(abi.encode(_yieldSource.depositToken.selector));
 
-    bool isInvalidYieldSource;
+    bool isValidYieldSource;
 
     if (depositTokenAddressData.length > 0) {
       (address depositTokenAddress) = abi.decode(depositTokenAddressData, (address));
 
-      isInvalidYieldSource = depositTokenAddress != address(0);
+      isValidYieldSource = depositTokenAddress != address(0);
     }
 
-    require(isInvalidYieldSource, "SwappableYieldSource/invalid-yield-source");
+    require(isValidYieldSource, "SwappableYieldSource/invalid-yield-source");
   }
 
   /// @notice Initializes the swappable yield source with the yieldSource address provided.
