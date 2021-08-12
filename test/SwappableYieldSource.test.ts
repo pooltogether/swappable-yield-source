@@ -286,10 +286,6 @@ describe('SwappableYieldSource', () => {
     await daiToken.connect(user).approve(swappableYieldSource.address, MaxUint256);
     await daiToken.connect(user).approve(yieldSource.address, MaxUint256);
 
-    await yieldSource.mock.balanceOfToken
-      .withArgs(swappableYieldSource.address)
-      .returns(toWei('300'));
-
     await yieldSource.mock.supplyTokenTo
       .withArgs(userAmount, swappableYieldSource.address)
       .returns();
@@ -310,9 +306,15 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should supply assets if totalSupply is not 0', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
-      await swappableYieldSource.mint(wallet2.address, toWei('100'));
+      await swappableYieldSource.mint(yieldSourceOwner.address, amount);
+      await swappableYieldSource.mint(wallet2.address, amount);
+
+      await yieldSource.mock.balanceOfToken
+        .withArgs(swappableYieldSource.address)
+        .returns(amount.mul(2));
+
       await supplyTokenTo(amount, yieldSourceOwner);
+      expect(await swappableYieldSource.totalSupply()).to.equal(amount.mul(3));
     });
 
     it('should revert on error', async () => {

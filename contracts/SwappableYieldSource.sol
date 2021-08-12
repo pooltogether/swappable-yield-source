@@ -208,13 +208,22 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @dev Asset tokens are supplied to the yield source, then deposited into the underlying yield source (eg: Aave, Compound, etc...).
   /// @dev Shares from the yield source are minted to the swappable yield source address (this contract).
   /// @dev Shares from the swappable yield source are minted to the `to` address.
-  /// @param amount Amount of `depositToken()` to be supplied.
-  /// @param to User whose balance will receive the tokens.
-  function supplyTokenTo(uint256 amount, address to) external override nonReentrant {
-    IERC20Upgradeable(depositToken).safeTransferFrom(msg.sender, address(this), amount);
-    yieldSource.supplyTokenTo(amount, address(this));
+  /// @dev We substract `balanceBefore` from `balanceAfter` in case the token transferred is a token that applies a fee on transfer.
+  /// @param _amount Amount of `depositToken()` to be supplied.
+  /// @param _to User whose balance will receive the tokens.
+  function supplyTokenTo(uint256 _amount, address _to) external override nonReentrant {
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
 
-    _mintShares(amount, to);
+    uint256 _balanceBefore = _depositToken.balanceOf(address(this));
+
+    _depositToken.safeTransferFrom(msg.sender, address(this), _amount);
+
+    uint256 _balanceAfter = _depositToken.balanceOf(address(this));
+    uint256 _receivedAmount = _balanceAfter.sub(_balanceBefore);
+
+    yieldSource.supplyTokenTo(_receivedAmount, address(this));
+
+    _mintShares(_receivedAmount, _to);
   }
 
   /// @notice Returns the total balance in swappable tokens (eg: swsDAI).
