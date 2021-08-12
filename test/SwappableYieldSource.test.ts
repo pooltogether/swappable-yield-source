@@ -497,12 +497,6 @@ describe('SwappableYieldSource', () => {
       ).to.be.revertedWith('SwappableYieldSource/yield-source-not-zero-address');
     });
 
-    it('should fail to swapYieldSource if yield source address is address zero', async () => {
-      await expect(
-        swappableYieldSource.connect(yieldSourceOwner).swapYieldSource(ethers.constants.AddressZero),
-      ).to.be.revertedWith('SwappableYieldSource/yield-source-not-zero-address');
-    });
-
     it('should fail to swapYieldSource if not yieldSourceOwner', async () => {
       await expect(
         swappableYieldSource.connect(wallet2).swapYieldSource(yieldSource.address),

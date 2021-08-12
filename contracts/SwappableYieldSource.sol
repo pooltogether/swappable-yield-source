@@ -65,25 +65,29 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Yield source interface.
   IYieldSource public yieldSource;
 
+  /// @notice Address of the ERC20 asset token deposited into the current yield source.
+  address public override depositToken;
+
   /// @notice Mock Initializer to initialize implementations used by minimal proxies.
   function freeze() external initializer {
     //no-op
   }
 
   /// @notice Hack to determine if address passed is an actual yield source.
-  /// @dev If depositTokenAddressData.length is not superior to 0, then staticcall didn't return any data.
+  /// @dev If _depositTokenData.length is not superior to 0, then staticcall didn't return any data.
   /// @param _yieldSource Yield source address to check.
-  function _requireYieldSource(IYieldSource _yieldSource) internal view {
+  /// @return _depositToken Address of the ERC20 token deposited into the yield source.
+  function _requireYieldSource(IYieldSource _yieldSource) internal view returns (address _depositToken) {
     require(address(_yieldSource) != address(0), "SwappableYieldSource/yieldSource-not-zero-address");
 
-    (, bytes memory depositTokenAddressData) = address(_yieldSource).staticcall(abi.encodePacked(_yieldSource.depositToken.selector));
+    (, bytes memory _depositTokenData) = address(_yieldSource).staticcall(abi.encodePacked(_yieldSource.depositToken.selector));
 
     bool isValidYieldSource;
 
-    if (depositTokenAddressData.length > 0) {
-      (address depositTokenAddress) = abi.decode(depositTokenAddressData, (address));
+    if (_depositTokenData.length > 0) {
+      (_depositToken) = abi.decode(_depositTokenData, (address));
 
-      isValidYieldSource = depositTokenAddress != address(0);
+      isValidYieldSource = _depositToken != address(0);
     }
 
     require(isValidYieldSource, "SwappableYieldSource/invalid-yield-source");
@@ -104,7 +108,9 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     string calldata _name,
     address _owner
   ) external initializer returns (bool) {
-    _requireYieldSource(_yieldSource);
+    address _depositToken = _requireYieldSource(_yieldSource);
+
+    depositToken = _depositToken;
     yieldSource = _yieldSource;
 
     __Ownable_init();
@@ -115,7 +121,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     __ERC20_init(_name, _symbol);
     _setupDecimals(_decimals);
 
-    IERC20Upgradeable(_yieldSource.depositToken()).safeApprove(address(_yieldSource), type(uint256).max);
+    IERC20Upgradeable(_depositToken).safeApprove(address(_yieldSource), type(uint256).max);
 
     emit SwappableYieldSourceInitialized(
       _yieldSource,
@@ -132,11 +138,11 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @dev Emergency function to re-approve max amount if approval amount dropped too low.
   /// @return true if operation is successful.
   function approveMaxAmount() external onlyOwner returns (bool) {
-    IYieldSource _yieldSource = yieldSource;
-    IERC20Upgradeable _depositToken = IERC20Upgradeable(_yieldSource.depositToken());
+    address _yieldSource = address(yieldSource);
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
 
-    uint256 _allowance = _depositToken.allowance(address(this), address(_yieldSource));
-    _depositToken.safeIncreaseAllowance(address(_yieldSource), type(uint256).max.sub(_allowance));
+    uint256 _allowance = _depositToken.allowance(address(this), _yieldSource);
+    _depositToken.safeIncreaseAllowance(_yieldSource, type(uint256).max.sub(_allowance));
 
     return true;
   }
@@ -205,18 +211,10 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param amount Amount of `depositToken()` to be supplied.
   /// @param to User whose balance will receive the tokens.
   function supplyTokenTo(uint256 amount, address to) external override nonReentrant {
-    IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
-
-    _depositToken.safeTransferFrom(msg.sender, address(this), amount);
+    IERC20Upgradeable(depositToken).safeTransferFrom(msg.sender, address(this), amount);
     yieldSource.supplyTokenTo(amount, address(this));
 
     _mintShares(amount, to);
-  }
-
-  /// @notice Returns the ERC20 asset token used for deposits.
-  /// @return ERC20 asset token address.
-  function depositToken() external view override returns (address) {
-    return yieldSource.depositToken();
   }
 
   /// @notice Returns the total balance in swappable tokens (eg: swsDAI).
@@ -231,12 +229,10 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param _amount Amount of `depositToken()` to withdraw.
   /// @return Actual amount of tokens that were redeemed.
   function redeemToken(uint256 _amount) external override nonReentrant returns (uint256) {
-    IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
-
     _burnShares(_amount);
 
     uint256 _redeemAmount = yieldSource.redeemToken(_amount);
-    _depositToken.safeTransfer(msg.sender, _redeemAmount);
+    IERC20Upgradeable(depositToken).safeTransfer(msg.sender, _redeemAmount);
 
     return _redeemAmount;
   }
@@ -248,10 +244,12 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   function _setYieldSource(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) internal {
     require(address(_newYieldSource) != address(_oldYieldSource), "SwappableYieldSource/same-yield-source");
 
-    IERC20Upgradeable _depositToken = IERC20Upgradeable(_newYieldSource.depositToken());
-    require(address(_depositToken) == _oldYieldSource.depositToken(), "SwappableYieldSource/different-deposit-token");
+    address _depositTokenAddress = _newYieldSource.depositToken();
+    require(_depositTokenAddress == depositToken, "SwappableYieldSource/different-deposit-token");
 
     yieldSource = _newYieldSource;
+
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(_depositTokenAddress);
     _depositToken.safeApprove(address(_newYieldSource), type(uint256).max);
 
     uint256 _allowance = _depositToken.allowance(address(this), address(_oldYieldSource));
@@ -270,7 +268,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     uint256 _redeemAmount = _oldYieldSource.balanceOfToken(address(this));
     uint256 _amountRedeemed = _oldYieldSource.redeemToken(_redeemAmount);
 
-    uint256 _currentBalance = IERC20Upgradeable(_oldYieldSource.depositToken()).balanceOf(address(this));
+    uint256 _currentBalance = IERC20Upgradeable(depositToken).balanceOf(address(this));
 
     require(_amountRedeemed <= _currentBalance, "SwappableYieldSource/transfer-amount-different");
 
