@@ -285,6 +285,8 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param _newYieldSource New yield source address to set and transfer funds to.
   /// @return true if operation is successful.
   function swapYieldSource(IYieldSource _newYieldSource) external onlyOwner nonReentrant returns (bool) {
+    require(address(_newYieldSource) != address(0), "SwappableYieldSource/yield-source-not-zero-address");
+
     IYieldSource _oldYieldSource = yieldSource;
 
     _setYieldSource(_oldYieldSource, _newYieldSource);
