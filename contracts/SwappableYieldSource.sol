@@ -247,6 +247,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     address _depositTokenAddress = _newYieldSource.depositToken();
     require(_depositTokenAddress == depositToken, "SwappableYieldSource/different-deposit-token");
 
+    depositToken = _depositToken;
     yieldSource = _newYieldSource;
 
     IERC20Upgradeable _depositToken = IERC20Upgradeable(_depositTokenAddress);
