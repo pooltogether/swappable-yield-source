@@ -463,9 +463,7 @@ describe('SwappableYieldSource', () => {
         .withArgs(swappableYieldSource.address)
         .returns(yieldSourceBalance);
 
-      await yieldSource.mock.redeemToken
-        .withArgs(yieldSourceBalance)
-        .returns(yieldSourceBalance);
+      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
 
       await daiToken.mint(swappableYieldSource.address, yieldSourceBalance);
 
