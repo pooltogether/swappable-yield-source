@@ -104,7 +104,7 @@ describe('SwappableYieldSource', () => {
     it('should fail if owner is address zero', async () => {
       await expect(
         initializeSwappableYieldSource(yieldSource.address, 18, AddressZero),
-      ).to.be.revertedWith('SwappableYieldSource/owner-not-zero-address');
+      ).to.be.revertedWith('Ownable: new owner is the zero address');
     });
   });
 
