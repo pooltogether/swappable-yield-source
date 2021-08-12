@@ -405,49 +405,48 @@ describe('SwappableYieldSource', () => {
   });
 
   describe('transferFunds()', () => {
-    let replacementYieldSourceBalance: BigNumber;
+    let yieldSourceBalance: BigNumber;
 
     beforeEach(() => {
-      replacementYieldSourceBalance = toWei('600');
+      yieldSourceBalance = toWei('600');
     });
 
     it('should transferFunds', async () => {
-      await replacementYieldSource.mock.balanceOfToken
+      await yieldSource.mock.balanceOfToken
         .withArgs(swappableYieldSource.address)
-        .returns(replacementYieldSourceBalance);
+        .returns(yieldSourceBalance);
 
-      await replacementYieldSource.mock.redeemToken
-        .withArgs(replacementYieldSourceBalance)
-        .returns(replacementYieldSourceBalance);
+      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
 
-      await daiToken.mint(swappableYieldSource.address, replacementYieldSourceBalance);
+      await daiToken.mint(swappableYieldSource.address, yieldSourceBalance);
 
-      await yieldSource.mock.supplyTokenTo
-        .withArgs(replacementYieldSourceBalance, swappableYieldSource.address)
+      await replacementYieldSource.mock.supplyTokenTo
+        .withArgs(yieldSourceBalance, swappableYieldSource.address)
         .returns();
 
       expect(
-        await swappableYieldSource
-          .transferFunds(replacementYieldSource.address),
-      ).to.emit(swappableYieldSource, 'FundsTransferred');
+        await swappableYieldSource.transferFunds(
+          yieldSource.address,
+          replacementYieldSource.address,
+        ),
+      )
+        .to.emit(swappableYieldSource, 'FundsTransferred')
+        .withArgs(yieldSource.address, replacementYieldSource.address, yieldSourceBalance);
     });
 
     it('should fail to transferFunds if balanceDiff different from amount', async () => {
       const differentAmount = toWei('200');
 
-      await replacementYieldSource.mock.balanceOfToken
+      await yieldSource.mock.balanceOfToken
         .withArgs(swappableYieldSource.address)
-        .returns(replacementYieldSourceBalance);
+        .returns(yieldSourceBalance);
 
-      await replacementYieldSource.mock.redeemToken
-        .withArgs(replacementYieldSourceBalance)
-        .returns(replacementYieldSourceBalance);
+      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
 
       await daiToken.mint(swappableYieldSource.address, differentAmount);
 
       await expect(
-        swappableYieldSource
-          .transferFunds(replacementYieldSource.address),
+        swappableYieldSource.transferFunds(yieldSource.address, replacementYieldSource.address),
       ).to.be.revertedWith('SwappableYieldSource/transfer-amount-different');
     });
   });
@@ -464,9 +463,7 @@ describe('SwappableYieldSource', () => {
         .withArgs(swappableYieldSource.address)
         .returns(yieldSourceBalance);
 
-      await yieldSource.mock.redeemToken
-        .withArgs(yieldSourceBalance)
-        .returns(yieldSourceBalance);
+      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
 
       await daiToken.mint(swappableYieldSource.address, yieldSourceBalance);
 
@@ -486,7 +483,7 @@ describe('SwappableYieldSource', () => {
 
       expect(transaction)
         .to.emit(swappableYieldSource, 'FundsTransferred')
-        .withArgs(yieldSource.address, yieldSourceBalance);
+        .withArgs(yieldSource.address, replacementYieldSource.address, yieldSourceBalance);
 
       expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
       expect(await daiToken.allowance(swappableYieldSource.address, yieldSource.address)).to.equal(

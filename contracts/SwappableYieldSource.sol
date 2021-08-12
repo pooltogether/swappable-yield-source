@@ -41,10 +41,12 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   );
 
   /// @notice Emitted when funds are successfully transferred from specified yield source to current yield source.
-  /// @param yieldSource Yield source address that provided funds.
+  /// @param oldYieldSource Previous address of yield source that provided funds.
+  /// @param newYieldSource New address of yield source that received funds.
   /// @param amount Amount of funds transferred.
   event FundsTransferred(
-    IYieldSource indexed yieldSource,
+    IYieldSource indexed oldYieldSource,
+    IYieldSource indexed newYieldSource,
     uint256 amount
   );
 
@@ -258,24 +260,23 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     emit SwappableYieldSourceSet(_newYieldSource);
   }
 
-  /// @notice Transfer funds from specified yield source to current yield source.
-  /// @dev We check that the `currentBalance` transferred is at least equal or superior to the `redeemAmount` requested.
+  /// @notice Transfer funds from old yield source to new yield source.
+  /// @dev We check that the `currentBalance` transferred is at least equal or superior to the `amountRedeemed` requested.
   /// @dev `amountRedeemed` can be inferior to `redeemAmount` if funds were deposited into a yield source that applies a fee on withdrawals.
   /// @dev `currentBalance` can be superior to `amountRedeemed` if yield has been accruing between redeeming and checking for a mathematical error.
-  /// @param _yieldSource Yield source address to transfer funds from.
-  function _transferFunds(IYieldSource _yieldSource) internal {
-    IYieldSource _currentYieldSource = yieldSource;
+  /// @param _oldYieldSource Previous yield source address to transfer funds from.
+  /// @param _newYieldSource New yield source address to transfer funds to.
+  function _transferFunds(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) internal {
+    uint256 _redeemAmount = _oldYieldSource.balanceOfToken(address(this));
+    uint256 _amountRedeemed = _oldYieldSource.redeemToken(_redeemAmount);
 
-    uint256 _redeemAmount = _yieldSource.balanceOfToken(address(this));
-    uint256 _amountRedeemed = _yieldSource.redeemToken(_redeemAmount);
-
-    uint256 _currentBalance = IERC20Upgradeable(_yieldSource.depositToken()).balanceOf(address(this));
+    uint256 _currentBalance = IERC20Upgradeable(_oldYieldSource.depositToken()).balanceOf(address(this));
 
     require(_amountRedeemed <= _currentBalance, "SwappableYieldSource/transfer-amount-different");
 
-    _currentYieldSource.supplyTokenTo(_currentBalance, address(this));
+    _newYieldSource.supplyTokenTo(_currentBalance, address(this));
 
-    emit FundsTransferred(_yieldSource, _currentBalance);
+    emit FundsTransferred(_oldYieldSource, _newYieldSource, _currentBalance);
   }
 
   /// @notice Swap current yield source for new yield source.
@@ -287,7 +288,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     IYieldSource _oldYieldSource = yieldSource;
 
     _setYieldSource(_oldYieldSource, _newYieldSource);
-    _transferFunds(_oldYieldSource);
+    _transferFunds(_oldYieldSource, _newYieldSource);
 
     return true;
   }
