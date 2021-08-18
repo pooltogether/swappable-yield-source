@@ -50,16 +50,14 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     uint256 amount
   );
 
-  /// @notice Emitted when ERC20 tokens other than yield source's tokens are withdrawn from the swappable yield source.
-  /// @param from Address that transferred funds.
-  /// @param to Address that received funds.
-  /// @param amount Amount of tokens transferred.
-  /// @param token ERC20 token transferred.
-  event TransferredERC20(
-    address indexed from,
-    address indexed to,
+  /// @notice Emitted when `depositToken` that would be stuck in this contract are successfully sent to the current yield source.
+  /// @param yieldSource Address of the current yield source that received funds.
+  /// @param amount Amount of tokens pushed.
+  /// @param depositToken Address of the `depositToken` pushed.
+  event FundsPushed(
+    address indexed yieldSource,
     uint256 amount,
-    IERC20Upgradeable indexed token
+    IERC20Upgradeable indexed depositToken
   );
 
   /// @notice Yield source interface.
@@ -247,7 +245,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     address _depositTokenAddress = _newYieldSource.depositToken();
     require(_depositTokenAddress == depositToken, "SwappableYieldSource/different-deposit-token");
 
-    depositToken = _depositToken;
+    depositToken = _depositTokenAddress;
     yieldSource = _newYieldSource;
 
     IERC20Upgradeable _depositToken = IERC20Upgradeable(_depositTokenAddress);
@@ -294,16 +292,19 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     return true;
   }
 
-  /// @notice Transfer ERC20 tokens other than the yield source's tokens held by this contract to the recipient address.
-  /// @dev This function is only callable by the owner or asset manager.
-  /// @param erc20Token ERC20 token to transfer.
-  /// @param to Recipient of the tokens.
-  /// @param amount Amount of tokens to transfer.
+  /// @notice Transfer `depositToken` held by this contract to the current yield source.
+  /// @dev This function is to make sure we are not leaving any funds unutilized in the swappable yield source.
   /// @return true if operation is successful.
-  function transferERC20(IERC20Upgradeable erc20Token, address to, uint256 amount) external onlyOwnerOrAssetManager returns (bool) {
-    require(address(erc20Token) != address(yieldSource), "SwappableYieldSource/yield-source-token-transfer-not-allowed");
-    erc20Token.safeTransfer(to, amount);
-    emit TransferredERC20(msg.sender, to, amount, erc20Token);
+  function pushFunds() external returns (bool) {
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
+    address _yieldSource = address(yieldSource);
+
+    uint256 _currentBalance = _depositToken.balanceOf(address(this));
+    require(_currentBalance > 0, "SwappableYieldSource/deposit-token-balance-gt-zero");
+
+    _depositToken.safeTransfer(_yieldSource, _currentBalance);
+
+    emit FundsPushed(_yieldSource, _currentBalance, _depositToken);
     return true;
   }
 }
