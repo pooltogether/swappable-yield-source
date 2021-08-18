@@ -10,13 +10,11 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@pooltogether/fixed-point/contracts/FixedPoint.sol";
 import "@pooltogether/yield-source-interface/contracts/IYieldSource.sol";
 
-import "./access/AssetManager.sol";
-
 /// @title Swappable yield source contract to allow a PoolTogether prize pool to swap between different yield sources.
 /// @dev This contract adheres to the PoolTogether yield source interface.
 /// @dev This contract inherits AssetManager which extends OwnableUpgradable.
 /// @notice Swappable yield source for a PoolTogether prize pool that generates yield by depositing into the specified yield source.
-contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, ReentrancyGuardUpgradeable {
+contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, OwnableUpgradeable, ReentrancyGuardUpgradeable {
   using SafeMathUpgradeable for uint256;
   using SafeERC20Upgradeable for IERC20Upgradeable;
 
@@ -245,7 +243,6 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     address _depositTokenAddress = _newYieldSource.depositToken();
     require(_depositTokenAddress == depositToken, "SwappableYieldSource/different-deposit-token");
 
-    depositToken = _depositTokenAddress;
     yieldSource = _newYieldSource;
 
     IERC20Upgradeable _depositToken = IERC20Upgradeable(_depositTokenAddress);

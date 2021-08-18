@@ -115,22 +115,6 @@ describe('SwappableYieldSource', () => {
     });
   });
 
-  describe('assetManager()', () => {
-    it('should setAssetManager', async () => {
-      await expect(swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address))
-        .to.emit(swappableYieldSource, 'AssetManagerTransferred')
-        .withArgs(AddressZero, wallet2.address);
-
-      expect(await swappableYieldSource.assetManager()).to.equal(wallet2.address);
-    });
-
-    it('should fail to setAssetManager', async () => {
-      await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(AddressZero),
-      ).to.be.revertedWith('onlyOwnerOrAssetManager/assetManager-not-zero-address');
-    });
-  });
-
   describe('approveMaxAmount()', () => {
     it('should approve yieldSource to spend max uint256 amount', async () => {
       expect(
@@ -494,14 +478,6 @@ describe('SwappableYieldSource', () => {
     it('should fail to swapYieldSource if yield source address is address zero', async () => {
       await expect(
         swappableYieldSource.connect(yieldSourceOwner).swapYieldSource(AddressZero),
-      ).to.be.revertedWith('SwappableYieldSource/yield-source-not-zero-address');
-    });
-
-    it('should fail to swapYieldSource if yield source address is address zero', async () => {
-      await expect(
-        swappableYieldSource
-          .connect(yieldSourceOwner)
-          .swapYieldSource(ethers.constants.AddressZero),
       ).to.be.revertedWith('SwappableYieldSource/yield-source-not-zero-address');
     });
 
