@@ -243,10 +243,9 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
   /// @notice Set new yield source.
   /// @dev After setting the new yield source, we need to approve it to spend maxUint256 amount of depositToken (eg: DAI).
+  /// @param _oldYieldSource Previous yield source address to replace with `_newYieldSource`.
   /// @param _newYieldSource New yield source address to set.
-  function _setYieldSource(IYieldSource _newYieldSource) internal {
-    IYieldSource _oldYieldSource = yieldSource;
-
+  function _setYieldSource(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) internal {
     require(address(_newYieldSource) != address(_oldYieldSource), "SwappableYieldSource/same-yield-source");
 
     IERC20Upgradeable _depositToken = IERC20Upgradeable(_newYieldSource.depositToken());
@@ -289,7 +288,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   function swapYieldSource(IYieldSource _newYieldSource) external onlyOwner nonReentrant returns (bool) {
     IYieldSource _oldYieldSource = yieldSource;
 
-    _setYieldSource(_newYieldSource);
+    _setYieldSource(_oldYieldSource, _newYieldSource);
     _transferFunds(_oldYieldSource);
 
     return true;

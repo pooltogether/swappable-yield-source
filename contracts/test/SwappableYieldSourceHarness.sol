@@ -31,8 +31,8 @@ contract SwappableYieldSourceHarness is SwappableYieldSource {
     return _sharesToToken(shares);
   }
 
-  function setYieldSource(IYieldSource _newYieldSource) external {
-    _setYieldSource(_newYieldSource);
+  function setYieldSource(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) external {
+    _setYieldSource(_oldYieldSource, _newYieldSource);
   }
 
   function transferFunds(IYieldSource _yieldSource) external {

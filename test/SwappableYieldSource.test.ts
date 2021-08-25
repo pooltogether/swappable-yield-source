@@ -379,7 +379,7 @@ describe('SwappableYieldSource', () => {
     it('should setYieldSource', async () => {
       expect(
         await swappableYieldSource
-          .setYieldSource(replacementYieldSource.address),
+          .setYieldSource(yieldSource.address, replacementYieldSource.address),
       ).to.emit(swappableYieldSource, 'SwappableYieldSourceSet');
 
       expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
@@ -390,7 +390,7 @@ describe('SwappableYieldSource', () => {
 
     it('should fail to setYieldSource if same yield source', async () => {
       await expect(
-        swappableYieldSource.setYieldSource(yieldSource.address),
+        swappableYieldSource.setYieldSource(yieldSource.address, yieldSource.address),
       ).to.be.revertedWith('SwappableYieldSource/same-yield-source');
     });
 
@@ -399,7 +399,7 @@ describe('SwappableYieldSource', () => {
 
       await expect(
         swappableYieldSource
-          .setYieldSource(replacementYieldSource.address),
+          .setYieldSource(yieldSource.address, replacementYieldSource.address),
       ).to.be.revertedWith('SwappableYieldSource/different-deposit-token');
     });
   });
