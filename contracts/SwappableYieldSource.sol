@@ -66,7 +66,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   IYieldSource public yieldSource;
 
   /// @notice Mock Initializer to initialize implementations used by minimal proxies.
-  function freeze() public initializer {
+  function freeze() external initializer {
     //no-op
   }
 
@@ -215,7 +215,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
   /// @notice Returns the ERC20 asset token used for deposits.
   /// @return ERC20 asset token address.
-  function depositToken() public view override returns (address) {
+  function depositToken() external view override returns (address) {
     return yieldSource.depositToken();
   }
 
