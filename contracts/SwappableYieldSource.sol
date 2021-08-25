@@ -135,8 +135,8 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     IYieldSource _yieldSource = yieldSource;
     IERC20Upgradeable _depositToken = IERC20Upgradeable(_yieldSource.depositToken());
 
-    uint256 allowance = _depositToken.allowance(address(this), address(_yieldSource));
-    _depositToken.safeIncreaseAllowance(address(_yieldSource), type(uint256).max.sub(allowance));
+    uint256 _allowance = _depositToken.allowance(address(this), address(_yieldSource));
+    _depositToken.safeIncreaseAllowance(address(_yieldSource), type(uint256).max.sub(_allowance));
 
     return true;
   }
@@ -228,17 +228,17 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Redeems tokens from the current yield source.
   /// @dev Shares of the swappable yield source address (this contract) are burnt from the yield source.
   /// @dev Shares of the `msg.sender` address are burnt from the swappable yield source.
-  /// @param amount Amount of `depositToken()` to withdraw.
+  /// @param _amount Amount of `depositToken()` to withdraw.
   /// @return Actual amount of tokens that were redeemed.
-  function redeemToken(uint256 amount) external override nonReentrant returns (uint256) {
+  function redeemToken(uint256 _amount) external override nonReentrant returns (uint256) {
     IERC20Upgradeable _depositToken = IERC20Upgradeable(yieldSource.depositToken());
 
-    _burnShares(amount);
+    _burnShares(_amount);
 
-    uint256 redeemableBalance = yieldSource.redeemToken(amount);
-    _depositToken.safeTransferFrom(address(this), msg.sender, redeemableBalance);
+    uint256 _redeemAmount = yieldSource.redeemToken(_amount);
+    _depositToken.safeTransfer(msg.sender, _redeemAmount);
 
-    return redeemableBalance;
+    return _redeemAmount;
   }
 
   /// @notice Determine if passed yield source is different from current yield source.
@@ -251,11 +251,17 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @dev After setting the new yield source, we need to approve it to spend maxUint256 amount of depositToken (eg: DAI).
   /// @param _newYieldSource New yield source address to set.
   function _setYieldSource(IYieldSource _newYieldSource) internal {
+    IYieldSource _oldYieldSource = yieldSource;
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(_oldYieldSource.depositToken());
+
     _requireDifferentYieldSource(_newYieldSource);
-    require(_newYieldSource.depositToken() == yieldSource.depositToken(), "SwappableYieldSource/different-deposit-token");
+    require(_newYieldSource.depositToken() == address(_depositToken), "SwappableYieldSource/different-deposit-token");
 
     yieldSource = _newYieldSource;
-    IERC20Upgradeable(_newYieldSource.depositToken()).safeApprove(address(_newYieldSource), type(uint256).max);
+    _depositToken.safeApprove(address(_newYieldSource), type(uint256).max);
+
+    uint256 _allowance = _depositToken.allowance(address(this), address(_oldYieldSource));
+    _depositToken.safeDecreaseAllowance(address(_oldYieldSource), _allowance);
 
     emit SwappableYieldSourceSet(_newYieldSource);
   }
@@ -278,11 +284,11 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     IYieldSource _currentYieldSource = yieldSource;
 
     _yieldSource.redeemToken(_amount);
-    uint256 currentBalance = IERC20Upgradeable(_yieldSource.depositToken()).balanceOf(address(this));
+    uint256 _currentBalance = IERC20Upgradeable(_currentYieldSource.depositToken()).balanceOf(address(this));
 
-    require(_amount <= currentBalance, "SwappableYieldSource/transfer-amount-different");
+    require(_amount <= _currentBalance, "SwappableYieldSource/transfer-amount-different");
 
-    _currentYieldSource.supplyTokenTo(currentBalance, address(this));
+    _currentYieldSource.supplyTokenTo(_currentBalance, address(this));
 
     emit FundsTransferred(_yieldSource, _amount);
   }
@@ -300,15 +306,15 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
   /// @notice Swap current yield source for new yield source.
   /// @dev This function is only callable by the owner or asset manager.
-  /// @dev We set a new yield source and then transfer funds from the now previous yield source to the new current yield source.
+  /// @dev We set a new yield source and then transfer funds from the now previous yield source to the new yield source.
   /// @param _newYieldSource New yield source address to set and transfer funds to.
   /// @return true if operation is successful.
   function swapYieldSource(IYieldSource _newYieldSource) external onlyOwnerOrAssetManager returns (bool) {
-    IYieldSource _currentYieldSource = yieldSource;
-    uint256 balance = _currentYieldSource.balanceOfToken(address(this));
+    IYieldSource _oldYieldSource = yieldSource;
+    uint256 _balance = _oldYieldSource.balanceOfToken(address(this));
 
     _setYieldSource(_newYieldSource);
-    _transferFunds(_currentYieldSource, balance);
+    _transferFunds(_oldYieldSource, _balance);
 
     return true;
   }
