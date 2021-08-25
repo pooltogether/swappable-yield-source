@@ -106,8 +106,6 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     yieldSource = _yieldSource;
 
     __Ownable_init();
-
-    require(_owner != address(0), "SwappableYieldSource/owner-not-zero-address");
     transferOwnership(_owner);
 
     __ReentrancyGuard_init();
