@@ -101,7 +101,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     string calldata _symbol,
     string calldata _name,
     address _owner
-  ) public initializer returns (bool) {
+  ) external initializer returns (bool) {
     _requireYieldSource(_yieldSource);
     yieldSource = _yieldSource;
 
