@@ -35,7 +35,7 @@ contract SwappableYieldSourceHarness is SwappableYieldSource {
     _setYieldSource(_oldYieldSource, _newYieldSource);
   }
 
-  function transferFunds(IYieldSource _yieldSource) external {
-    _transferFunds(_yieldSource);
+  function transferFunds(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) external {
+    _transferFunds(_oldYieldSource, _newYieldSource);
   }
 }
