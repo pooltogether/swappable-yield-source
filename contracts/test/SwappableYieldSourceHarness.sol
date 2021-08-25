@@ -10,10 +10,6 @@ contract SwappableYieldSourceHarness is SwappableYieldSource {
     return _requireYieldSource(_yieldSource);
   }
 
-  function requireDifferentYieldSource(IYieldSource _yieldSource) public view {
-    return _requireDifferentYieldSource(_yieldSource);
-  }
-
   function mint(address account, uint256 amount) public returns (bool) {
     _mint(account, amount);
     return true;
@@ -33,5 +29,13 @@ contract SwappableYieldSourceHarness is SwappableYieldSource {
 
   function sharesToToken(uint256 shares) external returns (uint256) {
     return _sharesToToken(shares);
+  }
+
+  function setYieldSource(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) external {
+    _setYieldSource(_oldYieldSource, _newYieldSource);
+  }
+
+  function transferFunds(IYieldSource _yieldSource) external {
+    _transferFunds(_yieldSource);
   }
 }

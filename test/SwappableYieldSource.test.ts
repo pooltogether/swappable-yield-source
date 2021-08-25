@@ -376,43 +376,21 @@ describe('SwappableYieldSource', () => {
   });
 
   describe('setYieldSource()', () => {
-    it('should setYieldSource if yieldSourceOwner', async () => {
+    it('should setYieldSource', async () => {
       expect(
         await swappableYieldSource
-          .connect(yieldSourceOwner)
-          .setYieldSource(replacementYieldSource.address),
+          .setYieldSource(yieldSource.address, replacementYieldSource.address),
       ).to.emit(swappableYieldSource, 'SwappableYieldSourceSet');
 
       expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
       expect(await daiToken.allowance(swappableYieldSource.address, yieldSource.address)).to.equal(
         0,
       );
-    });
-
-    it('should setYieldSource if assetManager', async () => {
-      await expect(swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address))
-        .to.emit(swappableYieldSource, 'AssetManagerTransferred')
-        .withArgs(AddressZero, wallet2.address);
-
-      expect(
-        await swappableYieldSource.connect(wallet2).setYieldSource(replacementYieldSource.address),
-      ).to.emit(swappableYieldSource, 'SwappableYieldSourceSet');
-
-      expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
-      expect(await daiToken.allowance(swappableYieldSource.address, yieldSource.address)).to.equal(
-        0,
-      );
-    });
-
-    it('should fail to setYieldSource if not yieldSourceOwner or assetManager', async () => {
-      await expect(
-        swappableYieldSource.connect(wallet2).setYieldSource(replacementYieldSource.address),
-      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
     });
 
     it('should fail to setYieldSource if same yield source', async () => {
       await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setYieldSource(yieldSource.address),
+        swappableYieldSource.setYieldSource(yieldSource.address, yieldSource.address),
       ).to.be.revertedWith('SwappableYieldSource/same-yield-source');
     });
 
@@ -421,22 +399,23 @@ describe('SwappableYieldSource', () => {
 
       await expect(
         swappableYieldSource
-          .connect(yieldSourceOwner)
-          .setYieldSource(replacementYieldSource.address),
+          .setYieldSource(yieldSource.address, replacementYieldSource.address),
       ).to.be.revertedWith('SwappableYieldSource/different-deposit-token');
     });
   });
 
   describe('transferFunds()', () => {
-    let yieldSourceBalance: BigNumber;
     let replacementYieldSourceBalance: BigNumber;
 
     beforeEach(() => {
-      yieldSourceBalance = toWei('300');
       replacementYieldSourceBalance = toWei('600');
     });
 
     it('should transferFunds', async () => {
+      await replacementYieldSource.mock.balanceOfToken
+        .withArgs(swappableYieldSource.address)
+        .returns(replacementYieldSourceBalance);
+
       await replacementYieldSource.mock.redeemToken
         .withArgs(replacementYieldSourceBalance)
         .returns(replacementYieldSourceBalance);
@@ -449,61 +428,27 @@ describe('SwappableYieldSource', () => {
 
       expect(
         await swappableYieldSource
-          .connect(yieldSourceOwner)
-          .transferFunds(replacementYieldSource.address, replacementYieldSourceBalance),
-      ).to.emit(swappableYieldSource, 'FundsTransferred');
-    });
-
-    it('should transferFunds if assetManager', async () => {
-      await replacementYieldSource.mock.redeemToken
-        .withArgs(replacementYieldSourceBalance)
-        .returns(replacementYieldSourceBalance);
-
-      await daiToken.mint(swappableYieldSource.address, replacementYieldSourceBalance);
-
-      await yieldSource.mock.supplyTokenTo
-        .withArgs(replacementYieldSourceBalance, swappableYieldSource.address)
-        .returns();
-
-      swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address);
-
-      expect(
-        await swappableYieldSource
-          .connect(wallet2)
-          .transferFunds(replacementYieldSource.address, replacementYieldSourceBalance),
+          .transferFunds(replacementYieldSource.address),
       ).to.emit(swappableYieldSource, 'FundsTransferred');
     });
 
     it('should fail to transferFunds if balanceDiff different from amount', async () => {
       const differentAmount = toWei('200');
 
+      await replacementYieldSource.mock.balanceOfToken
+        .withArgs(swappableYieldSource.address)
+        .returns(replacementYieldSourceBalance);
+
       await replacementYieldSource.mock.redeemToken
         .withArgs(replacementYieldSourceBalance)
-        .returns(differentAmount);
+        .returns(replacementYieldSourceBalance);
 
       await daiToken.mint(swappableYieldSource.address, differentAmount);
 
       await expect(
         swappableYieldSource
-          .connect(yieldSourceOwner)
-          .transferFunds(replacementYieldSource.address, replacementYieldSourceBalance),
+          .transferFunds(replacementYieldSource.address),
       ).to.be.revertedWith('SwappableYieldSource/transfer-amount-different');
-    });
-
-    it('should fail to transferFunds if same yield source', async () => {
-      await expect(
-        swappableYieldSource
-          .connect(yieldSourceOwner)
-          .transferFunds(yieldSource.address, yieldSourceBalance),
-      ).to.be.revertedWith('SwappableYieldSource/same-yield-source');
-    });
-
-    it('should fail to transferFunds if not owner or asset manager', async () => {
-      await expect(
-        swappableYieldSource
-          .connect(wallet2)
-          .transferFunds(yieldSource.address, yieldSourceBalance),
-      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
     });
   });
 
@@ -519,7 +464,9 @@ describe('SwappableYieldSource', () => {
         .withArgs(swappableYieldSource.address)
         .returns(yieldSourceBalance);
 
-      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
+      await yieldSource.mock.redeemToken
+        .withArgs(yieldSourceBalance)
+        .returns(yieldSourceBalance);
 
       await daiToken.mint(swappableYieldSource.address, yieldSourceBalance);
 
@@ -547,33 +494,10 @@ describe('SwappableYieldSource', () => {
       );
     });
 
-    it('should swapYieldSource if assetManager', async () => {
-      await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address),
-      ).to.emit(swappableYieldSource, 'AssetManagerTransferred');
-
-      const transaction = await swappableYieldSource
-        .connect(wallet2)
-        .swapYieldSource(replacementYieldSource.address);
-
-      expect(transaction)
-        .to.emit(swappableYieldSource, 'SwappableYieldSourceSet')
-        .withArgs(replacementYieldSource.address);
-
-      expect(transaction)
-        .to.emit(swappableYieldSource, 'FundsTransferred')
-        .withArgs(yieldSource.address, yieldSourceBalance);
-
-      expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
-      expect(await daiToken.allowance(swappableYieldSource.address, yieldSource.address)).to.equal(
-        0,
-      );
-    });
-
-    it('should fail to swapYieldSource if not yieldSourceOwner or assetManager', async () => {
+    it('should fail to swapYieldSource if not yieldSourceOwner', async () => {
       await expect(
         swappableYieldSource.connect(wallet2).swapYieldSource(yieldSource.address),
-      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
+      ).to.be.revertedWith('Ownable: caller is not the owner');
     });
   });
 
