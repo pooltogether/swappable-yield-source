@@ -8,7 +8,7 @@ import { ethers, waffle } from 'hardhat';
 
 import { ERC20Mintable, SwappableYieldSourceHarness } from '../types';
 
-const { AddressZero, MaxUint256 } = ethers.constants;
+const { AddressZero, MaxUint256, Zero } = ethers.constants;
 
 describe('SwappableYieldSource', () => {
   let contractsOwner: Signer;
@@ -112,22 +112,6 @@ describe('SwappableYieldSource', () => {
     it('should create SwappableYieldSource', async () => {
       expect(await swappableYieldSource.yieldSource()).to.equal(yieldSource.address);
       expect(await swappableYieldSource.owner()).to.equal(yieldSourceOwner.address);
-    });
-  });
-
-  describe('assetManager()', () => {
-    it('should setAssetManager', async () => {
-      await expect(swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address))
-        .to.emit(swappableYieldSource, 'AssetManagerTransferred')
-        .withArgs(AddressZero, wallet2.address);
-
-      expect(await swappableYieldSource.assetManager()).to.equal(wallet2.address);
-    });
-
-    it('should fail to setAssetManager', async () => {
-      await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(AddressZero),
-      ).to.be.revertedWith('onlyOwnerOrAssetManager/assetManager-not-zero-address');
     });
   });
 
@@ -315,10 +299,10 @@ describe('SwappableYieldSource', () => {
       await supplyTokenTo(amount, yieldSourceOwner);
     });
 
-    it('should revert on error', async () => {
+    it('should fail to supply tokens if amount supplied is zero', async () => {
       await expect(
-        swappableYieldSource.supplyTokenTo(amount, swappableYieldSource.address),
-      ).to.be.revertedWith('');
+        supplyTokenTo(Zero, yieldSourceOwner)
+      ).to.be.revertedWith('SwappableYieldSource/shares-gt-zero');
     });
   });
 
@@ -504,47 +488,20 @@ describe('SwappableYieldSource', () => {
     });
   });
 
-  describe('transferERC20()', () => {
-    const transferAmount = toWei('10');
+  describe('pushFunds()', () => {
+    it('should pushFunds to current yield source', async () => {
+      const pushAmount = toWei('100');
 
-    it('should transferERC20 if yieldSourceOwner', async () => {
-      await daiToken.mint(swappableYieldSource.address, transferAmount);
+      await daiToken.mint(swappableYieldSource.address, pushAmount);
 
-      await expect(
-        swappableYieldSource
-          .connect(yieldSourceOwner)
-          .transferERC20(daiToken.address, wallet2.address, transferAmount),
-      ).to.emit(swappableYieldSource, 'TransferredERC20');
+      await expect(swappableYieldSource.connect(yieldSourceOwner).pushFunds())
+        .to.emit(swappableYieldSource, 'FundsPushed')
+        .withArgs(await swappableYieldSource.yieldSource(), pushAmount, yieldSource.depositToken);
     });
 
-    it('should transferERC20 if assetManager', async () => {
-      await daiToken.mint(swappableYieldSource.address, transferAmount);
-
-      await expect(
-        swappableYieldSource.connect(yieldSourceOwner).setAssetManager(wallet2.address),
-      ).to.emit(swappableYieldSource, 'AssetManagerTransferred');
-
-      await expect(
-        swappableYieldSource
-          .connect(wallet2)
-          .transferERC20(daiToken.address, yieldSourceOwner.address, transferAmount),
-      ).to.emit(swappableYieldSource, 'TransferredERC20');
-    });
-
-    it('should not allow to transfer yield source token', async () => {
-      await expect(
-        swappableYieldSource
-          .connect(yieldSourceOwner)
-          .transferERC20(yieldSource.address, wallet2.address, transferAmount),
-      ).to.be.revertedWith('SwappableYieldSource/yield-source-token-transfer-not-allowed');
-    });
-
-    it('should fail to transferERC20 if not yieldSourceOwner or assetManager', async () => {
-      await expect(
-        swappableYieldSource
-          .connect(wallet2)
-          .transferERC20(daiToken.address, yieldSourceOwner.address, transferAmount),
-      ).to.be.revertedWith('onlyOwnerOrAssetManager/owner-or-manager');
+    it('should revert if depositToken balance is not superior to 0', async () => {
+      await expect(swappableYieldSource.connect(yieldSourceOwner).pushFunds())
+        .to.be.revertedWith('SwappableYieldSource/deposit-token-balance-gt-zero');
     });
   });
 });
