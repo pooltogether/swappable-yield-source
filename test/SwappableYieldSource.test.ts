@@ -8,7 +8,7 @@ import { ethers, waffle } from 'hardhat';
 
 import { ERC20Mintable, SwappableYieldSourceHarness } from '../types';
 
-const { AddressZero, MaxUint256 } = ethers.constants;
+const { AddressZero, MaxUint256, Zero } = ethers.constants;
 
 describe('SwappableYieldSource', () => {
   let contractsOwner: Signer;
@@ -299,10 +299,10 @@ describe('SwappableYieldSource', () => {
       await supplyTokenTo(amount, yieldSourceOwner);
     });
 
-    it('should revert on error', async () => {
+    it('should fail to supply tokens if amount supplied is zero', async () => {
       await expect(
-        swappableYieldSource.supplyTokenTo(amount, swappableYieldSource.address),
-      ).to.be.revertedWith('');
+        supplyTokenTo(Zero, yieldSourceOwner)
+      ).to.be.revertedWith('SwappableYieldSource/shares-gt-zero');
     });
   });
 
