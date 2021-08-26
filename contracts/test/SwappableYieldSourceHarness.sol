@@ -6,7 +6,7 @@ import "../SwappableYieldSource.sol";
 
 /* solium-disable security/no-block-members */
 contract SwappableYieldSourceHarness is SwappableYieldSource {
-  function requireYieldSource(IYieldSource _yieldSource) public view {
+  function requireYieldSource(IYieldSource _yieldSource) public view returns (address) {
     return _requireYieldSource(_yieldSource);
   }
 
