@@ -6,21 +6,33 @@ import { expect } from 'chai';
 import { MockContract } from 'ethereum-waffle';
 import { ethers, waffle } from 'hardhat';
 
-import { ERC20Mintable, SwappableYieldSourceHarness } from '../types';
+import {
+  ERC20Mintable,
+  YieldSourceHarness,
+  SwappableYieldSourceHarness,
+  ERC20Mintable__factory,
+} from '../types';
+import { ContractFactory } from 'ethers';
 
-const { AddressZero, MaxUint256 } = ethers.constants;
+const { AddressZero, MaxUint256, Zero } = ethers.constants;
 
 describe('SwappableYieldSource', () => {
   let contractsOwner: Signer;
   let yieldSourceOwner: SignerWithAddress;
   let wallet2: SignerWithAddress;
 
-  let yieldSource: MockContract;
-  let replacementYieldSource: MockContract;
+  let ERC20MintableContract: ERC20Mintable__factory;
+  let YieldSourceHarnessContract: ContractFactory;
+
+  let daiTokenMock: MockContract;
+  let yieldSourceMock: MockContract;
+
+  let yieldSource: YieldSourceHarness;
+  let replacementYieldSource: YieldSourceHarness;
   let swappableYieldSource: SwappableYieldSourceHarness;
 
   let daiToken: ERC20Mintable;
-  let aDAIToken: ERC20Mintable;
+  let aDaiToken: ERC20Mintable;
 
   let isInitializeTest = false;
 
@@ -38,6 +50,40 @@ describe('SwappableYieldSource', () => {
     );
   };
 
+  const supplyTokenTo = async (userAmount: BigNumber, user: SignerWithAddress) => {
+    const userAddress = user.address;
+
+    await daiToken.mint(userAddress, userAmount);
+    await daiToken.connect(user).approve(swappableYieldSource.address, MaxUint256);
+    await daiToken.connect(user).approve(yieldSource.address, MaxUint256);
+
+    await swappableYieldSource.connect(user).supplyTokenTo(userAmount, userAddress);
+  };
+
+  const tokenToShares = async (tokens: BigNumber) => {
+    const scale = BigNumber.from(10).pow(18);
+    const totalShares = await swappableYieldSource.callStatic.totalSupply();
+    const yieldSourceTotalSupply = await yieldSource.callStatic.balanceOfToken(
+      swappableYieldSource.address,
+    );
+
+    // shares = tokens * (totalShares / yieldSourceTotalSupply)
+    const exchangeRateMantissa = totalShares.mul(scale).div(yieldSourceTotalSupply);
+    return exchangeRateMantissa.mul(tokens).div(scale);
+  };
+
+  const sharesToToken = async (shares: BigNumber) => {
+    const scale = BigNumber.from(10).pow(18);
+    const totalShares = await swappableYieldSource.callStatic.totalSupply();
+    const yieldSourceTotalSupply = await yieldSource.callStatic.balanceOfToken(
+      swappableYieldSource.address,
+    );
+
+    // tokens = shares * (yieldSourceTotalSupply / totalShares)
+    const exchangeRateMantissa = yieldSourceTotalSupply.mul(scale).div(totalShares)
+    return exchangeRateMantissa.mul(shares).div(scale);
+  };
+
   const { getContractAt, getContractFactory, getSigners, utils } = ethers;
   const { deployMockContract } = waffle;
   const { parseEther: toWei, parseUnits } = utils;
@@ -45,16 +91,22 @@ describe('SwappableYieldSource', () => {
   beforeEach(async () => {
     [contractsOwner, yieldSourceOwner, wallet2] = await getSigners();
 
-    const ERC20MintableContract = await getContractFactory('ERC20Mintable', contractsOwner);
+    ERC20MintableContract = await getContractFactory('ERC20Mintable', contractsOwner);
 
     daiToken = await ERC20MintableContract.deploy('Dai Stablecoin', 'DAI', 18);
-    aDAIToken = await ERC20MintableContract.deploy('Aave interest bearing DAI ', 'aDAI', 18);
+    aDaiToken = await ERC20MintableContract.deploy('Aave interest bearing DAI ', 'aDAI', 18);
 
-    yieldSource = await deployMockContract(contractsOwner, YieldSourceInterface);
-    await yieldSource.mock.depositToken.returns(daiToken.address);
+    YieldSourceHarnessContract = await getContractFactory('YieldSourceHarness', contractsOwner);
 
-    replacementYieldSource = await deployMockContract(contractsOwner, YieldSourceInterface);
-    await replacementYieldSource.mock.depositToken.returns(daiToken.address);
+    daiTokenMock = await deployMockContract(contractsOwner, ERC20Mintable__factory.abi);
+
+    yieldSourceMock = await deployMockContract(contractsOwner, YieldSourceInterface);
+    await yieldSourceMock.mock.depositToken.returns(daiTokenMock.address);
+
+    yieldSource = (await YieldSourceHarnessContract.deploy(daiToken.address)) as YieldSourceHarness;
+    replacementYieldSource = (await YieldSourceHarnessContract.deploy(
+      daiToken.address,
+    )) as YieldSourceHarness;
 
     const SwappableYieldSource = await getContractFactory('SwappableYieldSourceHarness');
     const hardhatSwappableYieldSourceHarness = await SwappableYieldSource.deploy();
@@ -94,10 +146,14 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should fail if yieldSource depositToken is address zero', async () => {
-      await yieldSource.mock.depositToken.returns(AddressZero);
+      const yieldSourceAddressZero = await YieldSourceHarnessContract.deploy(AddressZero);
 
       await expect(
-        initializeSwappableYieldSource(yieldSource.address, 18, yieldSourceOwner.address),
+        initializeSwappableYieldSource(
+          yieldSourceAddressZero.address,
+          18,
+          yieldSourceOwner.address,
+        ),
       ).to.be.revertedWith('SwappableYieldSource/invalid-yield-source');
     });
 
@@ -157,27 +213,27 @@ describe('SwappableYieldSource', () => {
 
   describe('balanceOfToken()', () => {
     it('should return user balance', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
-      await swappableYieldSource.mint(wallet2.address, toWei('100'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('1000'));
+      await supplyTokenTo(toWei('500'), yieldSourceOwner);
+      await supplyTokenTo(toWei('100'), wallet2);
+
+      const shares = await swappableYieldSource.callStatic.balanceOf(wallet2.address);
+      const tokens = await sharesToToken(shares);
 
       expect(await swappableYieldSource.callStatic.balanceOfToken(wallet2.address)).to.equal(
-        toWei('500'),
+        tokens,
       );
     });
   });
 
   describe('_tokenToShares()', () => {
     it('should return shares amount', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
-      await swappableYieldSource.mint(wallet2.address, toWei('100'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('1000'));
+      await supplyTokenTo(toWei('500'), yieldSourceOwner);
+      await supplyTokenTo(toWei('100'), wallet2);
 
-      expect(await swappableYieldSource.callStatic.tokenToShares(toWei('10'))).to.equal(toWei('2'));
+      const tokens = toWei('10');
+      const shares = await tokenToShares(tokens);
+
+      expect(await swappableYieldSource.callStatic.tokenToShares(tokens)).to.equal(shares);
     });
 
     it('should return 0 if tokens param is 0', async () => {
@@ -191,58 +247,54 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should return shares even if yield source total supply has a lot of decimals', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('1'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('0.000000000000000005'));
+      await supplyTokenTo(toWei('0.000000000000000001'), yieldSourceOwner);
 
-      expect(
-        await swappableYieldSource.callStatic.tokenToShares(toWei('0.000000000000000005')),
-      ).to.equal(toWei('1'));
+      const tokens = toWei('0.000000000000000005');
+      const shares = await tokenToShares(tokens);
+
+      expect(await swappableYieldSource.callStatic.tokenToShares(tokens)).to.equal(shares);
     });
 
     it('should return shares even if yield source total supply increases', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
-      await swappableYieldSource.mint(wallet2.address, toWei('100'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('100'));
+      await supplyTokenTo(toWei('500'), yieldSourceOwner);
+      await supplyTokenTo(toWei('100'), wallet2);
 
-      expect(await swappableYieldSource.callStatic.tokenToShares(toWei('1'))).to.equal(toWei('2'));
+      const tokens = toWei('1');
+      const shares = await tokenToShares(tokens);
 
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(parseUnits('100', 36));
+      expect(await swappableYieldSource.callStatic.tokenToShares(tokens)).to.equal(shares);
 
-      expect(await swappableYieldSource.callStatic.tokenToShares(toWei('1'))).to.equal(2);
+      await supplyTokenTo(parseUnits('100', 36), wallet2);
+
+      const smallShares = await tokenToShares(tokens);
+
+      expect(await swappableYieldSource.callStatic.tokenToShares(tokens)).to.equal(smallShares);
     });
 
     it('should fail to return shares if yield source total supply increases too much', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
-      await swappableYieldSource.mint(wallet2.address, toWei('100'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('100'));
+      await supplyTokenTo(toWei('500'), yieldSourceOwner);
+      await supplyTokenTo(toWei('100'), wallet2);
 
-      expect(await swappableYieldSource.callStatic.tokenToShares(toWei('1'))).to.equal(toWei('2'));
+      const tokens = toWei('1');
+      const shares = await tokenToShares(tokens);
 
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(parseUnits('100', 37));
+      expect(await swappableYieldSource.callStatic.tokenToShares(tokens)).to.equal(shares);
 
-      expect(await swappableYieldSource.callStatic.tokenToShares(toWei('1'))).to.equal(0);
+      await expect(supplyTokenTo(parseUnits('100', 37), wallet2)).to.be.revertedWith(
+        'SwappableYieldSource/shares-gt-zero',
+      );
     });
   });
 
   describe('_sharesToToken()', () => {
     it('should return tokens amount', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
-      await swappableYieldSource.mint(wallet2.address, toWei('100'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('1000'));
+      await supplyTokenTo(toWei('500'), yieldSourceOwner);
+      await supplyTokenTo(toWei('100'), wallet2);
 
-      expect(await swappableYieldSource.callStatic.sharesToToken(toWei('2'))).to.equal(toWei('10'));
+      const shares = toWei('2');
+      const tokens = await sharesToToken(shares);
+
+      expect(await swappableYieldSource.callStatic.sharesToToken(shares)).to.equal(tokens);
     });
 
     it('should return shares if totalSupply is 0', async () => {
@@ -252,46 +304,44 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should return tokens even if totalSupply has a lot of decimals', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('0.000000000000000005'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('100'));
+      await supplyTokenTo(toWei('0.000000000000000001'), yieldSourceOwner);
 
-      expect(
-        await swappableYieldSource.callStatic.sharesToToken(toWei('0.000000000000000005')),
-      ).to.equal(toWei('100'));
+      const shares = toWei('0.000000000000000005');
+      const tokens = await sharesToToken(shares);
+
+      expect(await swappableYieldSource.callStatic.sharesToToken(shares)).to.equal(tokens);
     });
 
     it('should return tokens even if yield source total supply increases', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, toWei('100'));
-      await swappableYieldSource.mint(wallet2.address, toWei('100'));
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(toWei('100'));
+      await supplyTokenTo(toWei('500'), yieldSourceOwner);
+      await supplyTokenTo(toWei('100'), wallet2);
 
-      expect(await swappableYieldSource.callStatic.sharesToToken(toWei('2'))).to.equal(toWei('1'));
+      const shares = toWei('1');
+      const tokens = await sharesToToken(shares);
 
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(parseUnits('100', 36));
+      expect(await swappableYieldSource.callStatic.sharesToToken(shares)).to.equal(tokens);
 
-      expect(await swappableYieldSource.callStatic.sharesToToken(2)).to.equal(toWei('1'));
+      await supplyTokenTo(parseUnits('100', 36), wallet2);
+
+      const smallTokens = await sharesToToken(shares);
+
+      expect(await swappableYieldSource.callStatic.sharesToToken(shares)).to.equal(smallTokens);
+    });
+
+    it('should failt to return tokens if yield source total supply increases too much', async () => {
+      await supplyTokenTo(toWei('500'), yieldSourceOwner);
+      await supplyTokenTo(toWei('100'), wallet2);
+
+      const shares = toWei('1');
+      const tokens = await sharesToToken(shares);
+
+      expect(await swappableYieldSource.callStatic.sharesToToken(shares)).to.equal(tokens);
+
+      await expect(supplyTokenTo(parseUnits('100', 37), wallet2)).to.be.revertedWith(
+        'SwappableYieldSource/shares-gt-zero',
+      );
     });
   });
-
-  const supplyTokenTo = async (userAmount: BigNumber, user: SignerWithAddress) => {
-    const userAddress = user.address;
-
-    await daiToken.mint(userAddress, toWei('200'));
-    await daiToken.connect(user).approve(swappableYieldSource.address, MaxUint256);
-    await daiToken.connect(user).approve(yieldSource.address, MaxUint256);
-
-    await yieldSource.mock.supplyTokenTo
-      .withArgs(userAmount, swappableYieldSource.address)
-      .returns();
-
-    await swappableYieldSource.connect(user).supplyTokenTo(userAmount, userAddress);
-  };
 
   describe('supplyTokenTo()', () => {
     let amount: BigNumber;
@@ -306,15 +356,11 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should supply assets if totalSupply is not 0', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, amount);
-      await swappableYieldSource.mint(wallet2.address, amount);
-
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(amount.mul(2));
-
       await supplyTokenTo(amount, yieldSourceOwner);
-      expect(await swappableYieldSource.totalSupply()).to.equal(amount.mul(3));
+      await supplyTokenTo(amount, wallet2);
+
+      const shares = await tokenToShares(amount.mul(2));
+      expect(await swappableYieldSource.totalSupply()).to.equal(shares);
     });
 
     it('should revert on error', async () => {
@@ -334,23 +380,12 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should redeem assets', async () => {
-      await swappableYieldSource.mint(yieldSourceOwner.address, yieldSourceOwnerBalance);
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(yieldSourceOwnerBalance);
-
-      await yieldSource.mock.redeemToken.withArgs(redeemAmount).returns(redeemAmount);
-
-      // After redeeming DAI tokens from `yieldSource`,
-      // `swappableYieldSource` now owns `redeemAmount` of DAI tokens.
-      await daiToken.mint(swappableYieldSource.address, redeemAmount);
+      await supplyTokenTo(redeemAmount, yieldSourceOwner);
 
       await swappableYieldSource.connect(yieldSourceOwner).redeemToken(redeemAmount);
 
       expect(await daiToken.balanceOf(yieldSourceOwner.address)).to.equal(redeemAmount);
-      expect(await swappableYieldSource.totalSupply()).to.equal(
-        yieldSourceOwnerBalance.sub(redeemAmount),
-      );
+      expect(await swappableYieldSource.totalSupply()).to.equal(Zero);
     });
 
     it('should not be able to redeem assets if balance is 0', async () => {
@@ -365,11 +400,7 @@ describe('SwappableYieldSource', () => {
       const yieldSourceOwnerLowBalance = toWei('10');
       const revertReason = 'ERC20: burn amount exceeds balance';
 
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(yieldSourceOwnerLowBalance);
-
-      await yieldSource.mock.redeemToken.withArgs(redeemAmount).revertsWithReason(revertReason);
+      await supplyTokenTo(yieldSourceOwnerLowBalance, yieldSourceOwner);
 
       await expect(
         swappableYieldSource.connect(yieldSourceOwner).redeemToken(redeemAmount),
@@ -377,11 +408,53 @@ describe('SwappableYieldSource', () => {
     });
   });
 
+  describe('redeemToken()', () => {
+    before(() => {
+      isInitializeTest = true;
+    });
+
+    after(() => {
+      isInitializeTest = false;
+    });
+
+    it('should fail to redeemToken if amountRedeemed is different to amountReceived', async () => {
+      const yieldSourceBalance = toWei('600');
+
+      await daiTokenMock.mock.allowance
+        .withArgs(swappableYieldSource.address, yieldSourceMock.address)
+        .returns(ethers.constants.Zero);
+
+      await daiTokenMock.mock.approve.withArgs(yieldSourceMock.address, MaxUint256).returns(true);
+
+      await initializeSwappableYieldSource(yieldSourceMock.address, 18, yieldSourceOwner.address);
+
+      await swappableYieldSource.mint(yieldSourceOwner.address, yieldSourceBalance);
+
+      await yieldSourceMock.mock.balanceOfToken
+        .withArgs(swappableYieldSource.address)
+        .returns(yieldSourceBalance);
+
+      await yieldSourceMock.mock.redeemToken
+        .withArgs(yieldSourceBalance)
+        .returns(yieldSourceBalance);
+
+      await daiTokenMock.mock.balanceOf
+        .withArgs(swappableYieldSource.address)
+        .returns(yieldSourceBalance.sub(toWei('200')));
+
+      await expect(
+        swappableYieldSource.connect(yieldSourceOwner).redeemToken(yieldSourceBalance),
+      ).to.be.revertedWith('SwappableYieldSource/different-redeem-amount');
+    });
+  });
+
   describe('setYieldSource()', () => {
     it('should setYieldSource', async () => {
       expect(
-        await swappableYieldSource
-          .setYieldSource(yieldSource.address, replacementYieldSource.address),
+        await swappableYieldSource.setYieldSource(
+          yieldSource.address,
+          replacementYieldSource.address,
+        ),
       ).to.emit(swappableYieldSource, 'SwappableYieldSourceSet');
 
       expect(await swappableYieldSource.yieldSource()).to.equal(replacementYieldSource.address);
@@ -397,34 +470,30 @@ describe('SwappableYieldSource', () => {
     });
 
     it('should fail to setYieldSource if depositToken is different', async () => {
-      await replacementYieldSource.mock.depositToken.returns(aDAIToken.address);
+      const differentYieldSource = (await YieldSourceHarnessContract.deploy(
+        aDaiToken.address,
+      )) as YieldSourceHarness;
 
       await expect(
-        swappableYieldSource
-          .setYieldSource(yieldSource.address, replacementYieldSource.address),
+        swappableYieldSource.setYieldSource(yieldSource.address, differentYieldSource.address),
       ).to.be.revertedWith('SwappableYieldSource/different-deposit-token');
     });
   });
 
   describe('transferFunds()', () => {
-    let yieldSourceBalance: BigNumber;
+    let yieldSourceOwnerBalance: BigNumber;
+    let wallet2Balance: BigNumber;
 
     beforeEach(() => {
-      yieldSourceBalance = toWei('600');
+      yieldSourceOwnerBalance = toWei('150');
+      wallet2Balance = toWei('150');
     });
 
     it('should transferFunds', async () => {
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(yieldSourceBalance);
+      const yieldSourceBalance = yieldSourceOwnerBalance.add(wallet2Balance);
 
-      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
-
-      await daiToken.mint(swappableYieldSource.address, yieldSourceBalance);
-
-      await replacementYieldSource.mock.supplyTokenTo
-        .withArgs(yieldSourceBalance, swappableYieldSource.address)
-        .returns();
+      await supplyTokenTo(yieldSourceOwnerBalance, yieldSourceOwner);
+      await supplyTokenTo(wallet2Balance, wallet2);
 
       expect(
         await swappableYieldSource.transferFunds(
@@ -436,20 +505,69 @@ describe('SwappableYieldSource', () => {
         .withArgs(yieldSource.address, replacementYieldSource.address, yieldSourceBalance);
     });
 
-    it('should fail to transferFunds if balanceDiff different from amount', async () => {
-      const differentAmount = toWei('200');
+    it('should succeed to transferFunds if amountRedeemed is inferior to currentBalance', async () => {
+      const mintBalance = toWei('200');
+      const yieldSourceBalance = yieldSourceOwnerBalance.add(wallet2Balance).add(mintBalance);
 
-      await yieldSource.mock.balanceOfToken
+      await supplyTokenTo(yieldSourceOwnerBalance, yieldSourceOwner);
+      await supplyTokenTo(wallet2Balance, wallet2);
+
+      await daiToken.mint(swappableYieldSource.address, mintBalance);
+
+      expect(
+        await swappableYieldSource.transferFunds(
+          yieldSource.address,
+          replacementYieldSource.address,
+        ),
+      )
+        .to.emit(swappableYieldSource, 'FundsTransferred')
+        .withArgs(yieldSource.address, replacementYieldSource.address, yieldSourceBalance);
+    });
+  });
+
+  describe('transferFunds()', () => {
+    before(() => {
+      isInitializeTest = true;
+    });
+
+    after(() => {
+      isInitializeTest = false;
+    });
+
+    it('should fail to transferFunds if amountRedeemed is superior to currentBalance', async () => {
+      const yieldSourceBalance = toWei('600');
+
+      await daiTokenMock.mock.allowance
+        .withArgs(swappableYieldSource.address, yieldSourceMock.address)
+        .returns(ethers.constants.Zero);
+
+      await daiTokenMock.mock.approve.withArgs(yieldSourceMock.address, MaxUint256).returns(true);
+
+      await initializeSwappableYieldSource(yieldSourceMock.address, 18, yieldSourceOwner.address);
+
+      await yieldSourceMock.mock.balanceOfToken
         .withArgs(swappableYieldSource.address)
         .returns(yieldSourceBalance);
 
-      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
+      await yieldSourceMock.mock.redeemToken
+        .withArgs(yieldSourceBalance)
+        .returns(yieldSourceBalance);
 
-      await daiToken.mint(swappableYieldSource.address, differentAmount);
+      await daiTokenMock.mock.allowance
+        .withArgs(swappableYieldSource.address, replacementYieldSource.address)
+        .returns(ethers.constants.Zero);
+
+      await daiTokenMock.mock.approve
+        .withArgs(replacementYieldSource.address, MaxUint256)
+        .returns(true);
+
+      await daiTokenMock.mock.balanceOf
+        .withArgs(swappableYieldSource.address)
+        .returns(yieldSourceBalance.sub(toWei('200')));
 
       await expect(
-        swappableYieldSource.transferFunds(yieldSource.address, replacementYieldSource.address),
-      ).to.be.revertedWith('SwappableYieldSource/transfer-amount-different');
+        swappableYieldSource.transferFunds(yieldSourceMock.address, replacementYieldSource.address),
+      ).to.be.revertedWith('SwappableYieldSource/transfer-amount-inferior');
     });
   });
 
@@ -461,17 +579,11 @@ describe('SwappableYieldSource', () => {
       yieldSourceBalance = toWei('300');
       replacementYieldSourceBalance = toWei('600');
 
-      await yieldSource.mock.balanceOfToken
-        .withArgs(swappableYieldSource.address)
-        .returns(yieldSourceBalance);
-
-      await yieldSource.mock.redeemToken.withArgs(yieldSourceBalance).returns(yieldSourceBalance);
-
-      await daiToken.mint(swappableYieldSource.address, yieldSourceBalance);
-
-      await replacementYieldSource.mock.supplyTokenTo
-        .withArgs(yieldSourceBalance, swappableYieldSource.address)
-        .returns();
+      await supplyTokenTo(yieldSourceBalance, yieldSourceOwner);
+      await swappableYieldSource.mint(
+        replacementYieldSource.address,
+        await tokenToShares(replacementYieldSourceBalance),
+      );
     });
 
     it('should swapYieldSource if yieldSourceOwner', async () => {
