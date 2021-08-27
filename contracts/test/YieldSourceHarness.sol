@@ -26,7 +26,7 @@ contract YieldSourceHarness is ERC20Upgradeable, IYieldSource {
     depositToken = _depositToken;
   }
 
-  function balanceOfToken(address _addr) external override returns (uint256) {
+  function balanceOfToken(address _addr) external view override returns (uint256) {
     return balances[_addr];
   }
 
