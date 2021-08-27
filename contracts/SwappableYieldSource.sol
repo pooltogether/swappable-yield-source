@@ -3,6 +3,7 @@
 pragma solidity 0.7.6;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/SafeERC20Upgradeable.sol";
@@ -158,7 +159,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
       shares = tokens;
     } else {
       // rate = tokens / shares
-      // shares = tokens * (totalShares / swappableYieldSourceTotalSupply)
+      // shares = tokens * (totalShares / yieldSourceTotalSupply)
       uint256 exchangeMantissa = FixedPoint.calculateMantissa(_totalSupply, yieldSource.balanceOfToken(address(this)));
       shares = FixedPoint.multiplyUintByMantissa(tokens, exchangeMantissa);
     }
@@ -219,31 +220,43 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
     _depositToken.safeTransferFrom(msg.sender, address(this), _amount);
 
     uint256 _balanceAfter = _depositToken.balanceOf(address(this));
-    uint256 _receivedAmount = _balanceAfter.sub(_balanceBefore);
+    uint256 _amountReceived = _balanceAfter.sub(_balanceBefore);
 
-    yieldSource.supplyTokenTo(_receivedAmount, address(this));
+    yieldSource.supplyTokenTo(_amountReceived, address(this));
 
-    _mintShares(_receivedAmount, _to);
+    _mintShares(_amountReceived, _to);
   }
 
   /// @notice Returns the total balance in swappable tokens (eg: swsDAI).
+  /// @param _addr User address.
   /// @return Underlying balance of swappable tokens.
-  function balanceOfToken(address addr) external override returns (uint256) {
-    return _sharesToToken(balanceOf(addr));
+  function balanceOfToken(address _addr) external override returns (uint256) {
+    return _sharesToToken(balanceOf(_addr));
   }
 
   /// @notice Redeems tokens from the current yield source.
   /// @dev Shares of the swappable yield source address (this contract) are burnt from the yield source.
   /// @dev Shares of the `msg.sender` address are burnt from the swappable yield source.
+  /// @dev We check that the actual amount received is equal to the amount redeemed.
   /// @param _amount Amount of `depositToken()` to withdraw.
   /// @return Actual amount of tokens that were redeemed.
   function redeemToken(uint256 _amount) external override nonReentrant returns (uint256) {
     _burnShares(_amount);
 
-    uint256 _redeemAmount = yieldSource.redeemToken(_amount);
-    IERC20Upgradeable(depositToken).safeTransfer(msg.sender, _redeemAmount);
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
 
-    return _redeemAmount;
+    uint256 _balanceBefore = _depositToken.balanceOf(address(this));
+
+    uint256 _amountRedeemed = yieldSource.redeemToken(_amount);
+
+    uint256 _balanceAfter = _depositToken.balanceOf(address(this));
+    uint256 _amountReceived = _balanceAfter.sub(_balanceBefore);
+
+    require(_amountRedeemed == _amountReceived, "SwappableYieldSource/different-redeem-amount");
+
+    _depositToken.safeTransfer(msg.sender, _amountRedeemed);
+
+    return _amountRedeemed;
   }
 
   /// @notice Set new yield source.
@@ -270,7 +283,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Transfer funds from old yield source to new yield source.
   /// @dev We check that the `currentBalance` transferred is at least equal or superior to the `amountRedeemed` requested.
   /// @dev `amountRedeemed` can be inferior to `redeemAmount` if funds were deposited into a yield source that applies a fee on withdrawals.
-  /// @dev `currentBalance` can be superior to `amountRedeemed` if yield has been accruing between redeeming and checking for a mathematical error.
+  /// @dev `currentBalance` can be superior to `amountRedeemed` if there are some funds that remained idle in the swappabble yield source.
   /// @param _oldYieldSource Previous yield source address to transfer funds from.
   /// @param _newYieldSource New yield source address to transfer funds to.
   function _transferFunds(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) internal {
@@ -279,7 +292,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
     uint256 _currentBalance = IERC20Upgradeable(depositToken).balanceOf(address(this));
 
-    require(_amountRedeemed <= _currentBalance, "SwappableYieldSource/transfer-amount-different");
+    require(_amountRedeemed <= _currentBalance, "SwappableYieldSource/transfer-amount-inferior");
 
     _newYieldSource.supplyTokenTo(_currentBalance, address(this));
 
