@@ -81,11 +81,11 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   function _requireYieldSource(IYieldSource _yieldSource) internal view returns (address _depositToken) {
     require(address(_yieldSource) != address(0), "SwappableYieldSource/yieldSource-not-zero-address");
 
-    (, bytes memory _depositTokenData) = address(_yieldSource).staticcall(abi.encodePacked(_yieldSource.depositToken.selector));
+    (bool result, bytes memory _depositTokenData) = address(_yieldSource).staticcall(abi.encodePacked(_yieldSource.depositToken.selector));
 
-    bool isValidYieldSource;
+    bool isValidYieldSource = result;
 
-    if (_depositTokenData.length > 0) {
+    if (result && _depositTokenData.length > 0) {
       (_depositToken) = abi.decode(_depositTokenData, (address));
 
       isValidYieldSource = _depositToken != address(0);

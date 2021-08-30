@@ -142,7 +142,7 @@ describe('SwappableYieldSource', () => {
 
       await expect(
         initializeSwappableYieldSource(randomWallet.address, 18, yieldSourceOwner.address),
-      ).to.be.revertedWith('SwappableYieldSource/invalid-yield-source');
+      ).to.be.revertedWith('Transaction reverted: function call to a non-contract account');
     });
 
     it('should fail if yieldSource depositToken is address zero', async () => {
