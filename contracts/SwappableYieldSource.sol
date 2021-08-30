@@ -138,7 +138,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Approve yieldSource to spend maxUint256 amount of depositToken (eg: DAI).
   /// @dev Emergency function to re-approve max amount if approval amount dropped too low.
   /// @return true if operation is successful.
-  function approveMaxAmount() external onlyOwner returns (bool) {
+  function approveMaxAmount() external returns (bool) {
     address _yieldSource = address(yieldSource);
     IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
 

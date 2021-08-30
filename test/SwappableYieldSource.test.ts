@@ -197,12 +197,6 @@ describe('SwappableYieldSource', () => {
         MaxUint256,
       );
     });
-
-    it('should fail if not owner', async () => {
-      await expect(
-        swappableYieldSource.connect(wallet2).callStatic.approveMaxAmount(),
-      ).to.be.revertedWith('Ownable: caller is not the owner');
-    });
   });
 
   describe('depositToken()', () => {
