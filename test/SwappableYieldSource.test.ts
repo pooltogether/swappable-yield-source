@@ -73,15 +73,13 @@ describe('SwappableYieldSource', () => {
   };
 
   const sharesToToken = async (shares: BigNumber) => {
-    const scale = BigNumber.from(10).pow(18);
     const totalShares = await swappableYieldSource.callStatic.totalSupply();
     const yieldSourceTotalSupply = await yieldSource.callStatic.balanceOfToken(
       swappableYieldSource.address,
     );
 
-    // tokens = shares * (yieldSourceTotalSupply / totalShares)
-    const exchangeRateMantissa = yieldSourceTotalSupply.mul(scale).div(totalShares);
-    return exchangeRateMantissa.mul(shares).div(scale);
+    // tokens = (shares * yieldSourceTotalSupply) / totalShares
+    return shares.mul(yieldSourceTotalSupply).div(totalShares);
   };
 
   const { getContractAt, getContractFactory, getSigners, utils } = ethers;
@@ -365,11 +363,9 @@ describe('SwappableYieldSource', () => {
   });
 
   describe('redeemToken()', () => {
-    let yieldSourceOwnerBalance: BigNumber;
     let redeemAmount: BigNumber;
 
     beforeEach(() => {
-      yieldSourceOwnerBalance = toWei('300');
       redeemAmount = toWei('100');
     });
 
@@ -439,6 +435,20 @@ describe('SwappableYieldSource', () => {
       await expect(
         swappableYieldSource.connect(yieldSourceOwner).redeemToken(yieldSourceBalance),
       ).to.be.revertedWith('SwappableYieldSource/different-redeem-amount');
+    });
+  });
+
+  describe('redeemAllToken()', () => {
+    it('should redeem all assets', async () => {
+      const redeemAmount = toWei('100');
+
+      await supplyTokenTo(redeemAmount, yieldSourceOwner);
+      await supplyTokenTo(redeemAmount, yieldSourceOwner);
+
+      await swappableYieldSource.connect(yieldSourceOwner).redeemAllToken();
+
+      expect(await daiToken.balanceOf(yieldSourceOwner.address)).to.equal(redeemAmount.mul(2));
+      expect(await swappableYieldSource.totalSupply()).to.equal(Zero);
     });
   });
 

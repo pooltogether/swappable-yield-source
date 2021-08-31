@@ -149,60 +149,59 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   }
 
   /// @notice Calculates the number of shares that should be minted or burned when a user deposit or withdraw.
-  /// @param tokens Amount of tokens.
+  /// @param _tokens Amount of tokens.
   /// @return Number of shares.
-  function _tokenToShares(uint256 tokens) internal returns (uint256) {
-    uint256 shares;
+  function _tokenToShares(uint256 _tokens) internal returns (uint256) {
+    uint256 _shares;
     uint256 _totalSupply = totalSupply();
 
     if (_totalSupply == 0) {
-      shares = tokens;
+      _shares = _tokens;
     } else {
       // rate = tokens / shares
       // shares = tokens * (totalShares / yieldSourceTotalSupply)
-      uint256 exchangeMantissa = FixedPoint.calculateMantissa(_totalSupply, yieldSource.balanceOfToken(address(this)));
-      shares = FixedPoint.multiplyUintByMantissa(tokens, exchangeMantissa);
+      uint256 _exchangeMantissa = FixedPoint.calculateMantissa(_totalSupply, yieldSource.balanceOfToken(address(this)));
+      _shares = FixedPoint.multiplyUintByMantissa(_tokens, _exchangeMantissa);
     }
 
-    return shares;
+    return _shares;
   }
 
-  /// @notice Calculates the number of tokens a user has in the yield source.
-  /// @param shares Amount of shares.
+  /// @notice Calculates the number of tokens a user has in the swappable yield source.
+  /// @param _shares Amount of shares.
   /// @return Number of tokens.
-  function _sharesToToken(uint256 shares) internal returns (uint256) {
-    uint256 tokens;
+  function _sharesToToken(uint256 _shares) internal returns (uint256) {
+    uint256 _tokens;
     uint256 _totalSupply = totalSupply();
 
     if (_totalSupply == 0) {
-      tokens = shares;
+      _tokens = _shares;
     } else {
-      // tokens = shares * (yieldSourceTotalSupply / totalShares)
-      uint256 exchangeMantissa = FixedPoint.calculateMantissa(yieldSource.balanceOfToken(address(this)), _totalSupply);
-      tokens = FixedPoint.multiplyUintByMantissa(shares, exchangeMantissa);
+      // tokens = (shares * yieldSourceTotalSupply) / totalShares
+      _tokens = _shares.mul(yieldSource.balanceOfToken(address(this))).div(_totalSupply);
     }
 
-    return tokens;
+    return _tokens;
   }
 
   /// @notice Mint tokens to the user.
   /// @dev Shares corresponding to the number of tokens supplied are minted to user's balance.
-  /// @param mintAmount Amount of asset tokens to be minted.
-  /// @param to User whose balance will receive the tokens.
-  function _mintShares(uint256 mintAmount, address to) internal {
-    uint256 shares = _tokenToShares(mintAmount);
+  /// @param _mintAmount Amount of asset tokens to be minted.
+  /// @param _to User whose balance will receive the tokens.
+  function _mintShares(uint256 _mintAmount, address _to) internal {
+    uint256 _shares = _tokenToShares(_mintAmount);
 
-    require(shares > 0, "SwappableYieldSource/shares-gt-zero");
+    require(_shares > 0, "SwappableYieldSource/shares-gt-zero");
 
-    _mint(to, shares);
+    _mint(_to, _shares);
   }
 
   /// @notice Burn shares from user's balance.
   /// @dev Shares corresponding to the number of tokens withdrawn are burnt from user's balance.
-  /// @param burnAmount Amount of asset tokens to be burnt.
-  function _burnShares(uint256 burnAmount) internal {
-    uint256 shares = _tokenToShares(burnAmount);
-    _burn(msg.sender, shares);
+  /// @param _burnAmount Amount of asset tokens to be burnt.
+  function _burnShares(uint256 _burnAmount) internal {
+    uint256 _shares = _tokenToShares(_burnAmount);
+    _burn(msg.sender, _shares);
   }
 
   /// @notice Supplies tokens to the current yield source.  Allows assets to be supplied on other user's behalf using the `to` param.
@@ -231,7 +230,27 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @param _addr User address.
   /// @return Underlying balance of swappable tokens.
   function balanceOfToken(address _addr) external override returns (uint256) {
+    return _balanceOfToken(_addr);
+  }
+
+  /// @notice Returns the total balance in swappable tokens (eg: swsDAI).
+  /// @param _addr User address.
+  /// @return Underlying balance of swappable tokens.
+  function _balanceOfToken(address _addr) internal returns (uint256) {
     return _sharesToToken(balanceOf(_addr));
+  }
+
+  /// @notice Redeems tokens from the current yield source.
+  /// @param _amount Amount of `depositToken()` to withdraw.
+  /// @return Actual amount of tokens that were redeemed.
+  function redeemToken(uint256 _amount) external override nonReentrant returns (uint256) {
+    return _redeemToken(_amount);
+  }
+
+  /// @notice Redeems all tokens owned by `msg.sender` from the current yield source.
+  /// @return Actual amount of tokens that were redeemed.
+  function redeemAllToken() external nonReentrant returns (uint256) {
+    return _redeemToken(_balanceOfToken(msg.sender));
   }
 
   /// @notice Redeems tokens from the current yield source.
@@ -240,7 +259,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @dev We check that the actual amount received is equal to the amount redeemed.
   /// @param _amount Amount of `depositToken()` to withdraw.
   /// @return Actual amount of tokens that were redeemed.
-  function redeemToken(uint256 _amount) external override nonReentrant returns (uint256) {
+  function _redeemToken(uint256 _amount) internal returns (uint256) {
     _burnShares(_amount);
 
     IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
