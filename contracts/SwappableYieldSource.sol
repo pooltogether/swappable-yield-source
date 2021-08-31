@@ -3,6 +3,7 @@
 pragma solidity 0.7.6;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/SafeERC20Upgradeable.sol";
@@ -80,11 +81,11 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   function _requireYieldSource(IYieldSource _yieldSource) internal view returns (address _depositToken) {
     require(address(_yieldSource) != address(0), "SwappableYieldSource/yieldSource-not-zero-address");
 
-    (, bytes memory _depositTokenData) = address(_yieldSource).staticcall(abi.encodePacked(_yieldSource.depositToken.selector));
+    (bool result, bytes memory _depositTokenData) = address(_yieldSource).staticcall(abi.encodePacked(_yieldSource.depositToken.selector));
 
-    bool isValidYieldSource;
+    bool isValidYieldSource = result;
 
-    if (_depositTokenData.length > 0) {
+    if (result && _depositTokenData.length > 0) {
       (_depositToken) = abi.decode(_depositTokenData, (address));
 
       isValidYieldSource = _depositToken != address(0);
@@ -137,7 +138,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Approve yieldSource to spend maxUint256 amount of depositToken (eg: DAI).
   /// @dev Emergency function to re-approve max amount if approval amount dropped too low.
   /// @return true if operation is successful.
-  function approveMaxAmount() external onlyOwner returns (bool) {
+  function approveMaxAmount() external returns (bool) {
     address _yieldSource = address(yieldSource);
     IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
 
@@ -148,93 +149,133 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   }
 
   /// @notice Calculates the number of shares that should be minted or burned when a user deposit or withdraw.
-  /// @param tokens Amount of tokens.
+  /// @param _tokens Amount of tokens.
   /// @return Number of shares.
-  function _tokenToShares(uint256 tokens) internal returns (uint256) {
-    uint256 shares;
+  function _tokenToShares(uint256 _tokens) internal returns (uint256) {
+    uint256 _shares;
     uint256 _totalSupply = totalSupply();
 
     if (_totalSupply == 0) {
-      shares = tokens;
+      _shares = _tokens;
     } else {
       // rate = tokens / shares
-      // shares = tokens * (totalShares / swappableYieldSourceTotalSupply)
-      uint256 exchangeMantissa = FixedPoint.calculateMantissa(_totalSupply, yieldSource.balanceOfToken(address(this)));
-      shares = FixedPoint.multiplyUintByMantissa(tokens, exchangeMantissa);
+      // shares = tokens * (totalShares / yieldSourceTotalSupply)
+      uint256 _exchangeMantissa = FixedPoint.calculateMantissa(_totalSupply, yieldSource.balanceOfToken(address(this)));
+      _shares = FixedPoint.multiplyUintByMantissa(_tokens, _exchangeMantissa);
     }
 
-    return shares;
+    return _shares;
   }
 
-  /// @notice Calculates the number of tokens a user has in the yield source.
-  /// @param shares Amount of shares.
+  /// @notice Calculates the number of tokens a user has in the swappable yield source.
+  /// @param _shares Amount of shares.
   /// @return Number of tokens.
-  function _sharesToToken(uint256 shares) internal returns (uint256) {
-    uint256 tokens;
+  function _sharesToToken(uint256 _shares) internal returns (uint256) {
+    uint256 _tokens;
     uint256 _totalSupply = totalSupply();
 
     if (_totalSupply == 0) {
-      tokens = shares;
+      _tokens = _shares;
     } else {
-      // tokens = shares * (yieldSourceTotalSupply / totalShares)
-      uint256 exchangeMantissa = FixedPoint.calculateMantissa(yieldSource.balanceOfToken(address(this)), _totalSupply);
-      tokens = FixedPoint.multiplyUintByMantissa(shares, exchangeMantissa);
+      // tokens = (shares * yieldSourceTotalSupply) / totalShares
+      _tokens = _shares.mul(yieldSource.balanceOfToken(address(this))).div(_totalSupply);
     }
 
-    return tokens;
+    return _tokens;
   }
 
   /// @notice Mint tokens to the user.
   /// @dev Shares corresponding to the number of tokens supplied are minted to user's balance.
-  /// @param mintAmount Amount of asset tokens to be minted.
-  /// @param to User whose balance will receive the tokens.
-  function _mintShares(uint256 mintAmount, address to) internal {
-    uint256 shares = _tokenToShares(mintAmount);
+  /// @param _mintAmount Amount of asset tokens to be minted.
+  /// @param _to User whose balance will receive the tokens.
+  function _mintShares(uint256 _mintAmount, address _to) internal {
+    uint256 _shares = _tokenToShares(_mintAmount);
 
-    require(shares > 0, "SwappableYieldSource/shares-gt-zero");
+    require(_shares > 0, "SwappableYieldSource/shares-gt-zero");
 
-    _mint(to, shares);
+    _mint(_to, _shares);
   }
 
   /// @notice Burn shares from user's balance.
   /// @dev Shares corresponding to the number of tokens withdrawn are burnt from user's balance.
-  /// @param burnAmount Amount of asset tokens to be burnt.
-  function _burnShares(uint256 burnAmount) internal {
-    uint256 shares = _tokenToShares(burnAmount);
-    _burn(msg.sender, shares);
+  /// @param _burnAmount Amount of asset tokens to be burnt.
+  function _burnShares(uint256 _burnAmount) internal {
+    uint256 _shares = _tokenToShares(_burnAmount);
+    _burn(msg.sender, _shares);
   }
 
   /// @notice Supplies tokens to the current yield source.  Allows assets to be supplied on other user's behalf using the `to` param.
   /// @dev Asset tokens are supplied to the yield source, then deposited into the underlying yield source (eg: Aave, Compound, etc...).
   /// @dev Shares from the yield source are minted to the swappable yield source address (this contract).
   /// @dev Shares from the swappable yield source are minted to the `to` address.
-  /// @param amount Amount of `depositToken()` to be supplied.
-  /// @param to User whose balance will receive the tokens.
-  function supplyTokenTo(uint256 amount, address to) external override nonReentrant {
-    IERC20Upgradeable(depositToken).safeTransferFrom(msg.sender, address(this), amount);
-    yieldSource.supplyTokenTo(amount, address(this));
+  /// @dev We substract `balanceBefore` from `balanceAfter` in case the token transferred is a token that applies a fee on transfer.
+  /// @param _amount Amount of `depositToken()` to be supplied.
+  /// @param _to User whose balance will receive the tokens.
+  function supplyTokenTo(uint256 _amount, address _to) external override nonReentrant {
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
 
-    _mintShares(amount, to);
+    uint256 _balanceBefore = _depositToken.balanceOf(address(this));
+
+    _depositToken.safeTransferFrom(msg.sender, address(this), _amount);
+
+    uint256 _balanceAfter = _depositToken.balanceOf(address(this));
+    uint256 _amountReceived = _balanceAfter.sub(_balanceBefore);
+
+    yieldSource.supplyTokenTo(_amountReceived, address(this));
+
+    _mintShares(_amountReceived, _to);
   }
 
   /// @notice Returns the total balance in swappable tokens (eg: swsDAI).
+  /// @param _addr User address.
   /// @return Underlying balance of swappable tokens.
-  function balanceOfToken(address addr) external override returns (uint256) {
-    return _sharesToToken(balanceOf(addr));
+  function balanceOfToken(address _addr) external override returns (uint256) {
+    return _balanceOfToken(_addr);
+  }
+
+  /// @notice Returns the total balance in swappable tokens (eg: swsDAI).
+  /// @param _addr User address.
+  /// @return Underlying balance of swappable tokens.
+  function _balanceOfToken(address _addr) internal returns (uint256) {
+    return _sharesToToken(balanceOf(_addr));
+  }
+
+  /// @notice Redeems tokens from the current yield source.
+  /// @param _amount Amount of `depositToken()` to withdraw.
+  /// @return Actual amount of tokens that were redeemed.
+  function redeemToken(uint256 _amount) external override nonReentrant returns (uint256) {
+    return _redeemToken(_amount);
+  }
+
+  /// @notice Redeems all tokens owned by `msg.sender` from the current yield source.
+  /// @return Actual amount of tokens that were redeemed.
+  function redeemAllToken() external nonReentrant returns (uint256) {
+    return _redeemToken(_balanceOfToken(msg.sender));
   }
 
   /// @notice Redeems tokens from the current yield source.
   /// @dev Shares of the swappable yield source address (this contract) are burnt from the yield source.
   /// @dev Shares of the `msg.sender` address are burnt from the swappable yield source.
+  /// @dev We check that the actual amount received is equal to the amount redeemed.
   /// @param _amount Amount of `depositToken()` to withdraw.
   /// @return Actual amount of tokens that were redeemed.
-  function redeemToken(uint256 _amount) external override nonReentrant returns (uint256) {
+  function _redeemToken(uint256 _amount) internal returns (uint256) {
     _burnShares(_amount);
 
-    uint256 _redeemAmount = yieldSource.redeemToken(_amount);
-    IERC20Upgradeable(depositToken).safeTransfer(msg.sender, _redeemAmount);
+    IERC20Upgradeable _depositToken = IERC20Upgradeable(depositToken);
 
-    return _redeemAmount;
+    uint256 _balanceBefore = _depositToken.balanceOf(address(this));
+
+    uint256 _amountRedeemed = yieldSource.redeemToken(_amount);
+
+    uint256 _balanceAfter = _depositToken.balanceOf(address(this));
+    uint256 _amountReceived = _balanceAfter.sub(_balanceBefore);
+
+    require(_amountRedeemed == _amountReceived, "SwappableYieldSource/different-redeem-amount");
+
+    _depositToken.safeTransfer(msg.sender, _amountRedeemed);
+
+    return _amountRedeemed;
   }
 
   /// @notice Set new yield source.
@@ -261,7 +302,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
   /// @notice Transfer funds from old yield source to new yield source.
   /// @dev We check that the `currentBalance` transferred is at least equal or superior to the `amountRedeemed` requested.
   /// @dev `amountRedeemed` can be inferior to `redeemAmount` if funds were deposited into a yield source that applies a fee on withdrawals.
-  /// @dev `currentBalance` can be superior to `amountRedeemed` if yield has been accruing between redeeming and checking for a mathematical error.
+  /// @dev `currentBalance` can be superior to `amountRedeemed` if there are some funds that remained idle in the swappabble yield source.
   /// @param _oldYieldSource Previous yield source address to transfer funds from.
   /// @param _newYieldSource New yield source address to transfer funds to.
   function _transferFunds(IYieldSource _oldYieldSource, IYieldSource _newYieldSource) internal {
@@ -270,7 +311,7 @@ contract SwappableYieldSource is ERC20Upgradeable, IYieldSource, AssetManager, R
 
     uint256 _currentBalance = IERC20Upgradeable(depositToken).balanceOf(address(this));
 
-    require(_amountRedeemed <= _currentBalance, "SwappableYieldSource/transfer-amount-different");
+    require(_amountRedeemed <= _currentBalance, "SwappableYieldSource/transfer-amount-inferior");
 
     _newYieldSource.supplyTokenTo(_currentBalance, address(this));
 

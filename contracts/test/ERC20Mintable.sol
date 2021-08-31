@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0
+
 pragma solidity 0.7.6;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
@@ -10,7 +12,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
  */
 contract ERC20Mintable is ERC20Upgradeable {
 
-    constructor(string memory _name, string memory _symbol, uint8 _decimals) public {
+    constructor(string memory _name, string memory _symbol, uint8 _decimals) {
         __ERC20_init(_name, _symbol);
         _setupDecimals(_decimals);
     }
